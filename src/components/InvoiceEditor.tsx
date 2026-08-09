@@ -159,7 +159,7 @@ export function InvoiceEditor({ id }: { id: string }) {
     setBusy(true);
     try {
       const copy = await duplicateInvoice(current.id);
-      router.push(`/invoices/${copy.id}`);
+      router.push(`/invoice?id=${copy.id}`);
     } finally {
       setBusy(false);
     }

@@ -70,7 +70,7 @@ export function ClientsPage() {
 
   async function invoiceFor(clientId: string) {
     const inv = await createDraftInvoice({ clientId });
-    router.push(`/invoices/${inv.id}`);
+    router.push(`/invoice?id=${inv.id}`);
   }
 
   return (

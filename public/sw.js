@@ -1,15 +1,16 @@
 /* Ledgerly service worker — shell caching for installability + offline use */
-const CACHE = "ledgerly-v2";
+const BASE = new URL("./", self.registration.scope).pathname.replace(/\/$/, "");
+const CACHE = "ledgerly-v3";
 const PRECACHE = [
-  "/",
-  "/clients",
-  "/items",
-  "/templates",
-  "/settings",
-  "/manifest.webmanifest",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/brand/ledgerly-mark.png",
+  `${BASE}/`,
+  `${BASE}/clients/`,
+  `${BASE}/items/`,
+  `${BASE}/templates/`,
+  `${BASE}/settings/`,
+  `${BASE}/manifest.webmanifest`,
+  `${BASE}/icons/icon-192.png`,
+  `${BASE}/icons/icon-512.png`,
+  `${BASE}/brand/ledgerly-mark.png`,
 ];
 
 self.addEventListener("install", (event) => {
@@ -40,10 +41,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never cache API (email send, etc.)
-  if (url.pathname.startsWith("/api/")) return;
+  if (url.pathname.includes("/api/")) return;
 
-  // Navigations: network-first, fall back to cache
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
@@ -53,13 +52,12 @@ self.addEventListener("fetch", (event) => {
           return res;
         })
         .catch(() =>
-          caches.match(request).then((cached) => cached || caches.match("/")),
+          caches.match(request).then((cached) => cached || caches.match(`${BASE}/`)),
         ),
     );
     return;
   }
 
-  // Static assets: cache-first
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;

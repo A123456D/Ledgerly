@@ -8,8 +8,11 @@ export function PwaRegister() {
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
 
+    const base = (process.env.NEXT_PUBLIC_BASE_PATH || "").replace(/\/$/, "");
+    const swUrl = `${base}/sw.js`;
+
     const register = () => {
-      void navigator.serviceWorker.register("/sw.js").catch(() => {
+      void navigator.serviceWorker.register(swUrl).catch(() => {
         /* ignore registration failures in unsupported contexts */
       });
     };

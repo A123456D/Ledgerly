@@ -24,7 +24,7 @@ export function HomePage() {
     setBusy(true);
     try {
       const inv = await createDraftInvoice();
-      router.push(`/invoices/${inv.id}`);
+      router.push(`/invoice?id=${inv.id}`);
     } finally {
       setBusy(false);
     }
@@ -35,7 +35,7 @@ export function HomePage() {
     setBusy(true);
     try {
       const inv = await duplicateInvoice(invoices[0].id);
-      router.push(`/invoices/${inv.id}`);
+      router.push(`/invoice?id=${inv.id}`);
     } finally {
       setBusy(false);
     }
@@ -114,7 +114,7 @@ export function HomePage() {
                 >
                   <td className="px-4 py-3">
                     <Link
-                      href={`/invoices/${inv.id}`}
+                      href={`/invoice?id=${inv.id}`}
                       className="font-medium text-[var(--ink)] hover:underline"
                     >
                       {inv.number || "Draft"}
