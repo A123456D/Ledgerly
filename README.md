@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ledgerly
 
-## Getting Started
+Freelancer invoice maker focused on **design**, **speed**, and **compliance**.
 
-First, run the development server:
+Local-first (IndexedDB). No account. Numbers lock on issue. Beautiful A4 templates + PDF export + send.
+
+## Run
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Send invoices
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+On any invoice, click **Send**. The app builds the PDF and:
 
-## Learn More
+1. Opens the system share sheet with the PDF attached when supported, or
+2. Emails via [Resend](https://resend.com) if you set env vars, or
+3. Downloads the PDF and opens your mail app (attach the file before sending)
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# optional — one-click email from the server
+RESEND_API_KEY=re_xxx
+RESEND_FROM_EMAIL="Ledgerly <billing@yourdomain.com>"
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm test
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Flow
 
-## Deploy on Vercel
+1. **Settings** — business name, VAT/tax ID, currency, tax mode, prefix, logo, accent
+2. **Clients** / **Catalog** — reuse bill-to and line presets
+3. **New invoice** — live preview (Classic / Minimal / Bold) → **Issue** → **Download PDF**
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Drafts never consume invoice numbers. Voiding does not reuse a number. Issued invoices freeze a snapshot so later brand edits do not rewrite history.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Stack
+
+Next.js · TypeScript · Tailwind · Dexie · `@react-pdf/renderer` · Vitest
