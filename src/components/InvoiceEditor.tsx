@@ -222,65 +222,67 @@ export function InvoiceEditor({ id }: { id: string }) {
 
   return (
     <div>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3">
         <div>
           <Link href="/" className="text-xs text-[var(--muted)] hover:underline">
             ← All invoices
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h1 className="font-[family-name:var(--font-display)] text-2xl text-[var(--ink)] sm:text-3xl">
+            <h1 className="min-w-0 break-all font-[family-name:var(--font-display)] text-xl text-[var(--ink)] sm:text-3xl">
               {invoice.number || peekNumber || "Draft"}
             </h1>
             <StatusPill status={invoice.status} />
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 nav-scroll sm:flex-wrap sm:overflow-visible">
           {!locked ? (
             <>
-              <Button variant="secondary" onClick={onSave} disabled={busy}>
-                Save draft
+              <Button variant="secondary" className="shrink-0" onClick={onSave} disabled={busy}>
+                Save
               </Button>
-              <Button onClick={onIssue} disabled={busy}>
+              <Button className="shrink-0" onClick={onIssue} disabled={busy}>
                 Issue
               </Button>
               <Button
                 variant="danger"
+                className="shrink-0"
                 onClick={() => void onDeleteDraft()}
                 disabled={busy}
               >
-                Delete draft
+                Delete
               </Button>
             </>
           ) : (
             <>
               {invoice.status === "issued" ? (
-                <Button variant="secondary" onClick={() => onStatus("paid")} disabled={busy}>
+                <Button variant="secondary" className="shrink-0" onClick={() => onStatus("paid")} disabled={busy}>
                   Mark paid
                 </Button>
               ) : null}
               {invoice.status === "paid" ? (
-                <Button variant="ghost" onClick={() => onStatus("issued")} disabled={busy}>
+                <Button variant="ghost" className="shrink-0" onClick={() => onStatus("issued")} disabled={busy}>
                   Mark unpaid
                 </Button>
               ) : null}
               {invoice.status !== "void" ? (
-                <Button variant="danger" onClick={() => onStatus("void")} disabled={busy}>
+                <Button variant="danger" className="shrink-0" onClick={() => onStatus("void")} disabled={busy}>
                   Void
                 </Button>
               ) : null}
             </>
           )}
-          <Button variant="secondary" onClick={onPdf} disabled={busy}>
-            Download PDF
+          <Button variant="secondary" className="shrink-0" onClick={onPdf} disabled={busy}>
+            PDF
           </Button>
           <Button
             type="button"
+            className="shrink-0"
             onClick={() => setSendOpen(true)}
             disabled={busy || !preview}
           >
             Send
           </Button>
-          <Button variant="ghost" onClick={onDuplicate} disabled={busy}>
+          <Button variant="ghost" className="shrink-0" onClick={onDuplicate} disabled={busy}>
             Duplicate
           </Button>
         </div>
@@ -300,8 +302,8 @@ export function InvoiceEditor({ id }: { id: string }) {
       )}
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-        <div className="space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 sm:p-5">
-          <fieldset disabled={locked} className="space-y-4 disabled:opacity-70">
+        <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5">
+          <fieldset disabled={locked} className="min-w-0 space-y-4 disabled:opacity-70">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Client">
                 <select
@@ -513,10 +515,10 @@ export function InvoiceEditor({ id }: { id: string }) {
                 {invoice.lineItems.map((line, index) => (
                   <div
                     key={line.id}
-                    className="grid grid-cols-12 gap-2 rounded-lg border border-[var(--line)] bg-[var(--wash)]/40 p-2"
+                    className="grid grid-cols-2 gap-2 rounded-lg border border-[var(--line)] bg-[var(--wash)]/40 p-2 sm:grid-cols-12"
                   >
                     <input
-                      className={`${inputClass} col-span-12 sm:col-span-5`}
+                      className={`${inputClass} col-span-2 sm:col-span-5`}
                       placeholder="Description"
                       value={line.description}
                       onChange={(e) =>
@@ -534,11 +536,12 @@ export function InvoiceEditor({ id }: { id: string }) {
                       }}
                     />
                     <input
-                      className={`${inputClass} col-span-4 sm:col-span-1`}
+                      className={`${inputClass} sm:col-span-1`}
                       type="number"
                       min={0}
                       step={0.01}
                       title="Qty"
+                      placeholder="Qty"
                       value={line.quantity}
                       onChange={(e) =>
                         updateLine(line.id, {
@@ -547,11 +550,12 @@ export function InvoiceEditor({ id }: { id: string }) {
                       }
                     />
                     <input
-                      className={`${inputClass} col-span-4 sm:col-span-2`}
+                      className={`${inputClass} sm:col-span-2`}
                       type="number"
                       min={0}
                       step={0.01}
                       title="Unit price"
+                      placeholder="Rate"
                       value={line.unitPrice}
                       onChange={(e) =>
                         updateLine(line.id, {
@@ -560,11 +564,12 @@ export function InvoiceEditor({ id }: { id: string }) {
                       }
                     />
                     <input
-                      className={`${inputClass} col-span-4 sm:col-span-1`}
+                      className={`${inputClass} sm:col-span-1`}
                       type="number"
                       min={0}
                       step={0.01}
                       title="VAT %"
+                      placeholder="VAT %"
                       value={line.taxRate}
                       onChange={(e) =>
                         updateLine(line.id, {
@@ -573,11 +578,12 @@ export function InvoiceEditor({ id }: { id: string }) {
                       }
                     />
                     <input
-                      className={`${inputClass} col-span-6 sm:col-span-1`}
+                      className={`${inputClass} sm:col-span-1`}
                       type="number"
                       min={0}
                       max={100}
                       title="Discount %"
+                      placeholder="Disc %"
                       value={line.discountPercent}
                       onChange={(e) =>
                         updateLine(line.id, {
@@ -585,21 +591,23 @@ export function InvoiceEditor({ id }: { id: string }) {
                         })
                       }
                     />
-                    <div className="col-span-4 flex items-center justify-end text-xs tabular-nums text-[var(--muted)] sm:col-span-1">
-                      {formatMoney(
-                        line.quantity *
-                          line.unitPrice *
-                          (1 - (line.discountPercent || 0) / 100),
-                        invoice.currency,
-                      )}
+                    <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-2 sm:justify-end">
+                      <span className="text-xs tabular-nums text-[var(--muted)]">
+                        {formatMoney(
+                          line.quantity *
+                            line.unitPrice *
+                            (1 - (line.discountPercent || 0) / 100),
+                          invoice.currency,
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        className="shrink-0 text-xs text-red-700"
+                        onClick={() => removeLine(line.id)}
+                      >
+                        Remove
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className="col-span-2 text-xs text-red-700 sm:col-span-1"
-                      onClick={() => removeLine(line.id)}
-                    >
-                      Remove
-                    </button>
                   </div>
                 ))}
               </div>
@@ -629,12 +637,12 @@ export function InvoiceEditor({ id }: { id: string }) {
           </fieldset>
         </div>
 
-        <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+        <div className="min-w-0 xl:sticky xl:top-20 xl:self-start">
           <p className="mb-2 text-xs uppercase tracking-wider text-[var(--muted)]">
             Live A4 preview
           </p>
-          <div className="min-w-0 overflow-x-auto overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-3 sm:p-5">
-            <InvoiceStage maxScale={1} minScale={0.35}>
+          <div className="min-w-0 max-h-[70vh] overflow-x-auto overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 sm:max-h-none sm:p-5">
+            <InvoiceStage maxScale={1} minScale={0.28}>
               {preview ? <InvoicePreview doc={preview} /> : null}
             </InvoiceStage>
           </div>

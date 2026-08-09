@@ -89,30 +89,24 @@ export function InstallAppButton() {
     return (
       <button
         type="button"
-        className="inline-flex items-center justify-center rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-xs font-medium text-[var(--ink)] transition hover:bg-[var(--wash)] sm:text-sm"
+        className="inline-flex items-center justify-center rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1.5 text-xs font-medium text-[var(--ink)] transition hover:bg-[var(--wash)] sm:px-3 sm:text-sm"
         onClick={() => void onInstall()}
       >
-        Install app
+        Install
       </button>
     );
   }
 
   if (showIosHint && !dismissedIos) {
     return (
-      <div className="flex max-w-[14rem] items-start gap-2 rounded-md border border-[var(--line)] bg-[var(--wash)] px-2.5 py-1.5 text-[11px] leading-snug text-[var(--muted)] sm:max-w-xs sm:text-xs">
-        <p>
-          Install: tap <span className="font-medium text-[var(--ink)]">Share</span>, then{" "}
-          <span className="font-medium text-[var(--ink)]">Add to Home Screen</span>
-        </p>
-        <button
-          type="button"
-          className="shrink-0 text-[var(--muted)] hover:text-[var(--ink)]"
-          aria-label="Dismiss"
-          onClick={dismissIos}
-        >
-          ×
-        </button>
-      </div>
+      <button
+        type="button"
+        className="max-w-[9.5rem] rounded-md border border-[var(--line)] bg-[var(--wash)] px-2 py-1 text-left text-[10px] leading-snug text-[var(--muted)] sm:max-w-[14rem] sm:text-[11px]"
+        onClick={dismissIos}
+        title="Share → Add to Home Screen"
+      >
+        Share → Add to Home Screen <span className="opacity-60">×</span>
+      </button>
     );
   }
 

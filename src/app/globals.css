@@ -27,6 +27,16 @@ body {
   color: var(--ink);
   font-family: var(--font-body), system-ui, sans-serif;
   min-height: 100%;
+  overflow-x: hidden;
+}
+
+/* Soft horizontal scroll without visible scrollbar chrome on mobile nav */
+.nav-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.nav-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .invoice-sheet {

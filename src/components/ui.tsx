@@ -27,52 +27,54 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="min-h-full flex flex-col">
+    <div className="flex min-h-full min-h-[100dvh] flex-col pb-[env(safe-area-inset-bottom)]">
       <PwaRegister />
       <AutoBackupRunner />
       <OfflineBanner />
-      <header className="border-b border-[var(--line)] bg-[var(--panel)]/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <Link href="/" className="group flex items-center gap-2.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={assetUrl("/brand/ledgerly-mark.png")}
-              alt="Ledgerly"
-              width={36}
-              height={36}
-              className="h-8 w-8 shrink-0 rounded-[0.55rem] object-contain sm:h-9 sm:w-9"
-            />
-            <span className="hidden text-xs text-[var(--muted)] sm:inline">
-              invoices that hold up
-            </span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <InstallAppButton />
-            <nav className="flex items-center gap-1 text-sm">
-              {links.map((link) => {
-                const active =
-                  link.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(link.href);
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`rounded-md px-3 py-1.5 transition ${
-                      active
-                        ? "bg-[var(--ink)] text-[var(--paper)]"
-                        : "text-[var(--muted)] hover:bg-[var(--wash)] hover:text-[var(--ink)]"
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                );
-              })}
-            </nav>
+      <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[var(--panel)]/95 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-3 sm:px-6">
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <Link href="/" className="flex min-w-0 items-center gap-2.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={assetUrl("/brand/ledgerly-mark.png")}
+                alt="Ledgerly"
+                width={36}
+                height={36}
+                className="h-8 w-8 shrink-0 rounded-[0.55rem] object-contain sm:h-9 sm:w-9"
+              />
+              <span className="truncate font-[family-name:var(--font-display)] text-lg text-[var(--ink)] sm:text-xl">
+                Ledgerly
+              </span>
+            </Link>
+            <div className="shrink-0">
+              <InstallAppButton />
+            </div>
           </div>
+          <nav className="nav-scroll -mx-3 flex gap-1 overflow-x-auto px-3 pb-2.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+            {links.map((link) => {
+              const active =
+                link.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`shrink-0 rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition ${
+                    active
+                      ? "bg-[var(--ink)] text-[var(--paper)]"
+                      : "text-[var(--muted)] hover:bg-[var(--wash)] hover:text-[var(--ink)]"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+      <main className="mx-auto w-full max-w-7xl min-w-0 flex-1 px-3 py-5 sm:px-6 sm:py-8">
         {ready ? children : <p className="text-sm text-[var(--muted)]">Loading…</p>}
       </main>
     </div>
@@ -89,16 +91,18 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 className="font-[family-name:var(--font-display)] text-3xl tracking-tight text-[var(--ink)] sm:text-4xl">
+    <div className="mb-5 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <h1 className="font-[family-name:var(--font-display)] text-2xl tracking-tight text-[var(--ink)] sm:text-4xl">
           {title}
         </h1>
         {subtitle ? (
           <p className="mt-1 max-w-xl text-sm text-[var(--muted)]">{subtitle}</p>
         ) : null}
       </div>
-      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">{actions}</div>
+      ) : null}
     </div>
   );
 }
