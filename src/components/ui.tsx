@@ -8,6 +8,7 @@ import { InstallAppButton } from "@/components/InstallAppButton";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { PwaRegister } from "@/components/PwaRegister";
 import { AutoBackupRunner } from "@/components/AutoBackupRunner";
+import { assetUrl } from "@/lib/asset";
 
 const links = [
   { href: "/", label: "Invoices" },
@@ -35,9 +36,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/" className="group flex items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/brand/ledgerly-mark.png"
+              src={assetUrl("/brand/ledgerly-mark.png")}
               alt="Ledgerly"
-              className="h-8 w-8 rounded-[0.55rem] object-contain sm:h-9 sm:w-9"
+              width={36}
+              height={36}
+              className="h-8 w-8 shrink-0 rounded-[0.55rem] object-contain sm:h-9 sm:w-9"
             />
             <span className="hidden text-xs text-[var(--muted)] sm:inline">
               invoices that hold up

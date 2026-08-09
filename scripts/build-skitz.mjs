@@ -31,6 +31,7 @@ if (fs.existsSync(apiDir)) {
 }
 
 try {
+  fs.rmSync(path.join(root, ".next"), { recursive: true, force: true });
   run("npx", ["next", "build"], {
     SKITZ_BASE_PATH: basePath,
     NEXT_PUBLIC_BASE_PATH: basePath,
