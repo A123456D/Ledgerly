@@ -439,6 +439,20 @@ export function InvoiceEditor({ id }: { id: string }) {
 
             <div className="grid gap-3 sm:grid-cols-4">
               <Field
+                label="Reference number"
+                hint={
+                  invoice.status === "draft"
+                    ? "Preview only — locked in when you Issue"
+                    : undefined
+                }
+              >
+                <input
+                  className={`${inputClass} bg-[var(--wash)] tabular-nums`}
+                  readOnly
+                  value={invoice.number || peekNumber || "—"}
+                />
+              </Field>
+              <Field
                 label={
                   <span className="flex items-center justify-between gap-2">
                     Issue date

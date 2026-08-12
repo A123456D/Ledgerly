@@ -155,24 +155,22 @@ export async function buildInvoicePdfBlob(
                   style: { height: 32, width: 64, objectFit: "contain" },
                 })
               : null,
-            createElement(
-              View,
-              null,
-              createElement(Text, { style: styles.muted }, "Invoice"),
-              number
-                ? createElement(
-                    Text,
-                    { style: { fontSize: 14, color: accent, marginTop: 2 } },
-                    number,
-                  )
-                : null,
-            ),
           ),
           createElement(
             View,
             { style: { alignItems: "flex-end" } },
+            number
+              ? createElement(Text, { style: styles.muted }, "Reference")
+              : null,
+            number
+              ? createElement(
+                  Text,
+                  { style: { fontSize: 14, color: accent, marginTop: 2 } },
+                  number,
+                )
+              : null,
             issueDate
-              ? createElement(Text, null, `Issued ${issueDate}`)
+              ? createElement(Text, { style: { marginTop: 6 } }, `Issued ${issueDate}`)
               : null,
             dueDate ? createElement(Text, null, `Due ${dueDate}`) : null,
           ),
@@ -287,9 +285,12 @@ export async function buildInvoicePdfBlob(
                 "Invoice",
               ),
               number
+                ? createElement(Text, { style: styles.muted, marginTop: 8 }, "Reference")
+                : null,
+              number
                 ? createElement(
                     Text,
-                    { style: { marginTop: 6, fontSize: 12 } },
+                    { style: { marginTop: 2, fontSize: 12 } },
                     number,
                   )
                 : null,

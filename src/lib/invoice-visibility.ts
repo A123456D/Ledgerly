@@ -34,7 +34,7 @@ export const INVOICE_VISIBILITY_OPTIONS: {
 }[] = [
   { key: "issueDate", label: "Issue date" },
   { key: "dueDate", label: "Due date" },
-  { key: "invoiceNumber", label: "Invoice #" },
+  { key: "invoiceNumber", label: "Reference #" },
   { key: "from", label: "From" },
   { key: "billTo", label: "Bill to" },
   { key: "logo", label: "Logo" },

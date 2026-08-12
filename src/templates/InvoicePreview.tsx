@@ -99,6 +99,34 @@ function InvoiceNumber({
   return <Tag className={className}>{doc.number}</Tag>;
 }
 
+/** Top-right reference block (auto invoice number). */
+function ReferenceBlock({
+  doc,
+  accent,
+  className = "",
+  numberClassName = "text-base",
+  labelClassName = "",
+}: {
+  doc: InvoiceViewModel;
+  accent: string;
+  className?: string;
+  numberClassName?: string;
+  labelClassName?: string;
+}) {
+  if (!show(doc, "invoiceNumber") || !doc.number) return null;
+  return (
+    <div className={`text-right ${className}`}>
+      <Label className={labelClassName || "opacity-45"}>Reference</Label>
+      <p
+        className={`mt-1 font-semibold tabular-nums tracking-tight ${numberClassName}`}
+        style={{ color: accent }}
+      >
+        {doc.number}
+      </p>
+    </div>
+  );
+}
+
 function Gate({
   doc,
   field,
@@ -448,9 +476,12 @@ function Classic({ doc, accent, logo }: Ctx) {
           >
             Invoice
           </p>
-          <p className="mt-1 text-sm font-medium tabular-nums">
-            <InvoiceNumber doc={doc} />
-          </p>
+          <ReferenceBlock
+            doc={doc}
+            accent={accent}
+            numberClassName="text-sm"
+            labelClassName="mt-1 opacity-45"
+          />
           <DateMeta doc={doc} className="mt-3 text-xs opacity-55" />
         </div>
       </div>
@@ -1060,18 +1091,20 @@ function CanvaCopy({ doc, accent, logo }: Ctx & { custom?: CustomTemplate | null
           style={style === "band" ? { background: "rgba(255,255,255,0.94)" } : undefined}
         >
           <div className="mb-4 flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <Logo src={logo} name={doc.business.name} accent={useAccent} className="h-10 w-auto max-w-[100px]" />
-              <Gate doc={doc} field="invoiceNumber">
-                <div>
-                  <Label className="text-neutral-500">Invoice</Label>
-                  <p className="text-lg font-semibold" style={{ color: useAccent }}>
-                    {doc.number}
-                  </p>
-                </div>
-              </Gate>
+            <Logo src={logo} name={doc.business.name} accent={useAccent} className="h-10 w-auto max-w-[100px]" />
+            <div className="min-w-0 text-right">
+              <ReferenceBlock
+                doc={doc}
+                accent={useAccent}
+                numberClassName="text-lg"
+              />
+              <DateMeta
+                doc={doc}
+                stacked
+                className="mt-2 text-sm text-neutral-600"
+                issuePrefix="Issued "
+              />
             </div>
-            <DateMeta doc={doc} stacked className="text-right text-sm text-neutral-600" issuePrefix="Issued " />
           </div>
           <div className="grid grid-cols-2 gap-6 text-sm">
             <Gate doc={doc} field="from">
