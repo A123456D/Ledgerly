@@ -111,8 +111,13 @@ export function InvoiceEditor({ id }: { id: string }) {
     setError("");
     try {
       const saved = await saveInvoice(current);
-      setInvoice(saved);
-      setMessage("Draft saved");
+      const { clientCreated, ...stored } = saved;
+      setInvoice(stored);
+      setMessage(
+        clientCreated
+          ? "Draft saved — client added to your Clients list"
+          : "Draft saved",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -126,10 +131,14 @@ export function InvoiceEditor({ id }: { id: string }) {
     setBusy(true);
     setError("");
     try {
-      await saveInvoice(current);
-      const issued = await issueInvoice(current.id);
+      const saved = await saveInvoice(current);
+      const issued = await issueInvoice(saved.id);
       setInvoice(issued);
-      setMessage(`Issued as ${issued.number}`);
+      setMessage(
+        issued.clientId
+          ? `Issued as ${issued.number} — client saved`
+          : `Issued as ${issued.number}`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Issue failed");
     } finally {

@@ -43,6 +43,71 @@ export function clientToParty(client: Client): PartySnapshot {
   };
 }
 
+/**
+ * Create or update a Clients book entry from invoice bill-to details.
+ * First invoice for a new name/email adds them automatically.
+ */
+export async function ensureClientFromInvoice(
+  invoice: Invoice,
+): Promise<{ invoice: Invoice; created: boolean }> {
+  const name = invoice.client.name.trim();
+  if (!name) {
+    return { invoice, created: false };
+  }
+
+  const now = new Date().toISOString();
+  const party = {
+    name: invoice.client.name.trim(),
+    email: invoice.client.email.trim(),
+    address: invoice.client.address.trim(),
+    city: invoice.client.city.trim(),
+    postalCode: invoice.client.postalCode.trim(),
+    country: invoice.client.country.trim(),
+    taxId: invoice.client.taxId.trim(),
+  };
+
+  if (invoice.clientId) {
+    const existing = await db.clients.get(invoice.clientId);
+    if (existing) {
+      await db.clients.put({
+        ...existing,
+        ...party,
+        updatedAt: now,
+      });
+      return { invoice, created: false };
+    }
+  }
+
+  const clients = await db.clients.toArray();
+  const emailKey = party.email.toLowerCase();
+  const nameKey = party.name.toLowerCase();
+  const match =
+    (emailKey
+      ? clients.find((c) => c.email.trim().toLowerCase() === emailKey)
+      : undefined) ||
+    clients.find((c) => c.name.trim().toLowerCase() === nameKey);
+
+  if (match) {
+    await db.clients.put({
+      ...match,
+      ...party,
+      updatedAt: now,
+    });
+    const next = { ...invoice, clientId: match.id };
+    return { invoice: next, created: false };
+  }
+
+  const id = uid("cli");
+  await db.clients.put({
+    id,
+    ...party,
+    notes: "",
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { invoice: { ...invoice, clientId: id }, created: true };
+}
+
 export function businessToParty(
   business: Business,
   logoId?: string | null,
@@ -155,16 +220,21 @@ export async function createDraftInvoice(options?: {
   return invoice;
 }
 
-export async function saveInvoice(invoice: Invoice): Promise<Invoice> {
+export async function saveInvoice(
+  invoice: Invoice,
+): Promise<Invoice & { clientCreated?: boolean }> {
   if (invoice.status !== "draft") {
     throw new Error("Only draft invoices can be edited");
   }
-  const next = {
-    ...invoice,
-    totals: recomputeTotals(invoice),
+  const { invoice: withClient, created } = await ensureClientFromInvoice(invoice);
+  const next: Invoice & { clientCreated?: boolean } = {
+    ...withClient,
+    totals: recomputeTotals(withClient),
     updatedAt: new Date().toISOString(),
+    clientCreated: created,
   };
-  await db.invoices.put(next);
+  const { clientCreated: _flag, ...toStore } = next;
+  await db.invoices.put(toStore);
   return next;
 }
 
@@ -198,9 +268,11 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     throw new Error("Add at least one line item before issuing");
   }
 
+  const { invoice: linked } = await ensureClientFromInvoice(invoice);
+
   const business = await getBusiness();
   const settings = await getSettings();
-  const year = new Date(invoice.issueDate + "T12:00:00").getFullYear();
+  const year = new Date(linked.issueDate + "T12:00:00").getFullYear();
   const { number, nextState } = allocateNumber(
     {
       nextSequence: settings.nextSequence,
@@ -210,32 +282,32 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     year,
   );
 
-  const totals = recomputeTotals(invoice);
-  const custom = invoice.templateId.startsWith("custom:")
-    ? await getCustomTemplate(invoice.templateId)
+  const totals = recomputeTotals(linked);
+  const custom = linked.templateId.startsWith("custom:")
+    ? await getCustomTemplate(linked.templateId)
     : undefined;
 
   const snapshot: IssuedSnapshot = {
     number,
     issuedAt: new Date().toISOString(),
-    business: businessToParty(business, invoice.logoId),
-    client: { ...invoice.client },
-    currency: invoice.currency,
-    taxMode: invoice.taxMode,
-    templateId: invoice.templateId,
+    business: businessToParty(business, linked.logoId),
+    client: { ...linked.client },
+    currency: linked.currency,
+    taxMode: linked.taxMode,
+    templateId: linked.templateId,
     customBackgroundDataUrl: custom?.backgroundDataUrl,
     customContentTopMm: custom?.contentTopMm,
     customContentStyle: custom?.contentStyle,
-    issueDate: invoice.issueDate,
-    dueDate: invoice.dueDate,
-    notes: invoice.notes,
-    paymentInstructions: invoice.paymentInstructions,
-    lineItems: invoice.lineItems.map((l) => ({ ...l })),
+    issueDate: linked.issueDate,
+    dueDate: linked.dueDate,
+    notes: linked.notes,
+    paymentInstructions: linked.paymentInstructions,
+    lineItems: linked.lineItems.map((l) => ({ ...l })),
     totals,
   };
 
   const issued: Invoice = {
-    ...invoice,
+    ...linked,
     status: "issued",
     number,
     totals,
@@ -243,7 +315,7 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     updatedAt: new Date().toISOString(),
   };
 
-  await db.transaction("rw", db.invoices, db.settings, async () => {
+  await db.transaction("rw", db.invoices, db.settings, db.clients, async () => {
     await db.invoices.put(issued);
     await saveSettings({
       nextSequence: nextState.nextSequence,
