@@ -17,7 +17,7 @@ import {
 } from "./types";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { getBuiltinTemplate } from "./templates/catalog";
-import { resolveLogoDataUrl } from "./logos";
+import { resolveLogoDataUrl, normalizeBusinessLogos } from "./logos";
 
 export function emptyLine(taxRate = 0): LineItem {
   return {
@@ -147,7 +147,7 @@ export async function createDraftInvoice(options?: {
   clientId?: string;
   fromInvoiceId?: string;
 }): Promise<Invoice> {
-  const business = await getBusiness();
+  const business = normalizeBusinessLogos(await getBusiness());
   const settings = await getSettings();
   const now = new Date().toISOString();
   const issueDate = todayISO();
@@ -161,7 +161,7 @@ export async function createDraftInvoice(options?: {
   let accentColor = business.accentColor;
   let taxMode = business.taxMode;
   let currency = business.currency;
-  let logoId: string | null | undefined = business.defaultLogoId ?? null;
+  let logoId: string | null | undefined = business.defaultLogoId;
   let visibility = undefined as Invoice["visibility"];
 
   if (options?.fromInvoiceId) {
@@ -180,7 +180,7 @@ export async function createDraftInvoice(options?: {
       accentColor = source.accentColor;
       taxMode = source.taxMode;
       currency = source.currency;
-      logoId = source.logoId ?? business.defaultLogoId ?? null;
+      logoId = source.logoId ?? business.defaultLogoId;
       visibility = source.visibility ? { ...source.visibility } : undefined;
     }
   } else if (options?.clientId) {
@@ -270,7 +270,7 @@ export async function issueInvoice(id: string): Promise<Invoice> {
 
   const { invoice: linked } = await ensureClientFromInvoice(invoice);
 
-  const business = await getBusiness();
+  const business = normalizeBusinessLogos(await getBusiness());
   const settings = await getSettings();
   const year = new Date(
     (linked.issueDate || todayISO()) + "T12:00:00",
@@ -289,10 +289,15 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     ? await getCustomTemplate(linked.templateId)
     : undefined;
 
+  const logoId =
+    linked.logoId === null
+      ? null
+      : linked.logoId ?? business.defaultLogoId ?? null;
+
   const snapshot: IssuedSnapshot = {
     number,
     issuedAt: new Date().toISOString(),
-    business: businessToParty(business, linked.logoId),
+    business: businessToParty(business, logoId),
     client: { ...linked.client },
     currency: linked.currency,
     taxMode: linked.taxMode,
@@ -439,7 +444,7 @@ export async function displayDocumentLive(
   invoice: Invoice,
 ): Promise<InvoiceViewModel> {
   if (invoice.snapshot) return displayDocument(invoice);
-  const business = await getBusiness();
+  const business = normalizeBusinessLogos(await getBusiness());
   const peek =
     invoice.status === "draft"
       ? await peekDraftNumber()
@@ -457,16 +462,21 @@ export async function displayDocumentLive(
     }
   }
 
+  const logoId =
+    invoice.logoId === null
+      ? null
+      : invoice.logoId ?? business.defaultLogoId ?? null;
+
   return {
     number: peek,
-    business: businessToParty(business, invoice.logoId),
+    business: businessToParty(business, logoId),
     client: invoice.client,
     currency: invoice.currency,
     taxMode: invoice.taxMode,
     templateId: invoice.templateId,
     accentColor: accent,
     fontPair: business.fontPair,
-    logoDataUrl: resolveLogoDataUrl(business, invoice.logoId),
+    logoDataUrl: resolveLogoDataUrl(business, logoId),
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,
     notes: invoice.notes,

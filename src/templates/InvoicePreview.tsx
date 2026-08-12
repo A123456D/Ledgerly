@@ -116,10 +116,11 @@ function ReferenceBlock({
   if (!show(doc, "invoiceNumber") || !doc.number) return null;
   return (
     <div className={`text-right ${className}`}>
-      <Label className={labelClassName || "opacity-45"}>Reference</Label>
+      <Label className={labelClassName || "opacity-45"} color={accent}>
+        Reference
+      </Label>
       <p
-        className={`mt-1 font-semibold tabular-nums tracking-tight ${numberClassName}`}
-        style={{ color: accent }}
+        className={`mt-1 font-semibold tabular-nums tracking-tight text-[#1c1917] ${numberClassName}`}
       >
         {doc.number}
       </p>
@@ -1064,66 +1065,59 @@ function Parchment({ doc, accent, logo }: Ctx) {
 
 function CanvaCopy({ doc, accent, logo }: Ctx & { custom?: CustomTemplate | null }) {
   const custom = doc.customTemplate;
-  const bg = custom?.backgroundDataUrl;
-  const top = custom?.contentTopMm ?? 52;
-  const style = custom?.contentStyle ?? "card";
+  const headerMm = custom?.contentTopMm ?? 45;
   const useAccent = custom?.accentColor || accent;
 
   return (
-    <Sheet className="bg-white text-[#1c1917] font-[family-name:var(--font-body)]">
-      {bg ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={bg}
-          alt=""
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-top"
-        />
-      ) : null}
-      <div className="relative" style={{ paddingTop: `${top}mm` }}>
+    <Sheet bleed className="bg-white text-[#1c1917] font-[family-name:var(--font-body)]">
+      {custom?.backgroundDataUrl ? (
         <div
-          className={
-            style === "transparent"
-              ? "px-1"
-              : style === "band"
-                ? "px-4 py-4"
-                : "rounded-xl border border-black/5 bg-white/92 px-5 py-5 shadow-sm backdrop-blur-[2px]"
-          }
-          style={style === "band" ? { background: "rgba(255,255,255,0.94)" } : undefined}
+          className="relative w-full shrink-0 overflow-hidden border-b border-black/5"
+          style={{ height: `${headerMm}mm` }}
         >
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <Logo src={logo} name={doc.business.name} accent={useAccent} className="h-10 w-auto max-w-[100px]" />
-            <div className="min-w-0 text-right">
-              <ReferenceBlock
-                doc={doc}
-                accent={useAccent}
-                numberClassName="text-lg"
-              />
-              <DateMeta
-                doc={doc}
-                stacked
-                className="mt-2 text-sm text-neutral-600"
-                issuePrefix="Issued "
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-6 text-sm">
-            <Gate doc={doc} field="from">
-              <div>
-                <Label className="text-neutral-400">From</Label>
-                <Party p={doc.business} phone={doc.business.phone} className="mt-1" />
-              </div>
-            </Gate>
-            <Gate doc={doc} field="billTo">
-              <div>
-                <Label className="text-neutral-400">Bill to</Label>
-                <Party p={doc.client} className="mt-1" />
-              </div>
-            </Gate>
-          </div>
-          <FancyTable doc={doc} accent={useAccent} mode="soft" />
-          <DueCard doc={doc} accent={useAccent} />
-          <Notes doc={doc} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={custom.backgroundDataUrl}
+            alt=""
+            className="h-full w-full object-cover object-top"
+          />
         </div>
+      ) : null}
+      <div className="invoice-pad bg-white">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <Logo
+            src={logo}
+            name={doc.business.name}
+            accent={useAccent}
+            className="h-10 w-auto max-w-[120px]"
+          />
+          <div className="min-w-0 text-right">
+            <ReferenceBlock doc={doc} accent={useAccent} numberClassName="text-lg" />
+            <DateMeta
+              doc={doc}
+              stacked
+              className="mt-2 text-sm text-neutral-700"
+              issuePrefix="Issued "
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-6 text-sm">
+          <Gate doc={doc} field="from">
+            <div>
+              <Label className="text-neutral-500">From</Label>
+              <Party p={doc.business} phone={doc.business.phone} className="mt-1" />
+            </div>
+          </Gate>
+          <Gate doc={doc} field="billTo">
+            <div>
+              <Label className="text-neutral-500">Bill to</Label>
+              <Party p={doc.client} className="mt-1" />
+            </div>
+          </Gate>
+        </div>
+        <FancyTable doc={doc} accent={useAccent} mode="soft" />
+        <DueCard doc={doc} accent={useAccent} />
+        <Notes doc={doc} />
       </div>
     </Sheet>
   );

@@ -30,7 +30,7 @@ export function TemplatesPage() {
       const { template, templateId } = await importCanvaTemplate(file);
       await saveSettings({ defaultTemplate: templateId });
       setMessage(
-        `Imported “${template.name}”. Adjust the content offset so fields sit below your Canva header art.`,
+        `Imported “${template.name}”. Adjust header height if the banner is clipped.`,
       );
       setEditingId(template.id);
     } catch (err) {
@@ -95,7 +95,7 @@ export function TemplatesPage() {
             </Field>
             <Field
               label="Content top offset (mm)"
-              hint="Push fields down so they don’t cover your Canva header."
+              hint="Height of the Canva header banner shown at the top."
             >
               <input
                 className={inputClass}

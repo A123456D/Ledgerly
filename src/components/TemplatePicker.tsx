@@ -47,7 +47,7 @@ export function TemplatePicker({
           onClick={() => inputRef.current?.click()}
           className="rounded-md border border-dashed border-[var(--accent)] bg-teal-50/60 px-3 py-2 text-xs font-medium text-teal-900 transition hover:bg-teal-50 disabled:opacity-50"
         >
-          {busy ? "Uploading…" : "Upload Canva template"}
+          {busy ? "Uploading…" : "Upload Canva letterhead"}
         </button>
         <input
           ref={inputRef}
@@ -57,7 +57,7 @@ export function TemplatePicker({
           onChange={(e) => void onUpload(e.target.files?.[0] ?? null)}
         />
         <p className="text-[11px] text-[var(--muted)]">
-          PNG/JPG letterhead — applied to this invoice
+          Header banner only (logos + branding). Enter line items in the editor below.
         </p>
       </div>
       {error ? <p className="text-xs text-red-700">{error}</p> : null}

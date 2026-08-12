@@ -568,6 +568,31 @@ export function InvoiceEditor({ id }: { id: string }) {
               </p>
             </div>
 
+            {business ? (
+              <LogoLibrary
+                label="Logos on invoice"
+                business={normalizeBusinessLogos(business)}
+                allowNone
+                selectedLogoId={
+                  invoice.logoId === null
+                    ? null
+                    : invoice.logoId ?? business.defaultLogoId ?? null
+                }
+                onSelectLogo={(logoId) => update({ logoId })}
+                onChange={(next) => {
+                  void saveBusiness(next).then(() => {
+                    void refreshPreview({
+                      ...invoice,
+                      logoId:
+                        invoice.logoId === null
+                          ? null
+                          : invoice.logoId ?? next.defaultLogoId ?? null,
+                    });
+                  });
+                }}
+              />
+            ) : null}
+
             <div>
               <p className="mb-2 text-sm text-[var(--muted)]">Template</p>
               <TemplatePicker
@@ -576,34 +601,13 @@ export function InvoiceEditor({ id }: { id: string }) {
                 onAccentSuggest={(accent) => update({ accentColor: accent })}
               />
               <p className="mt-2 text-xs text-[var(--muted)]">
-                Upload a Canva letterhead above, or manage designs under{" "}
+                Pick a built-in style, or upload a Canva header banner. Manage designs under{" "}
                 <Link href="/templates" className="underline">
                   Templates
                 </Link>
                 .
               </p>
             </div>
-
-            {business ? (
-              <LogoLibrary
-                label="Logos"
-                business={normalizeBusinessLogos(business)}
-                allowNone
-                selectedLogoId={invoice.logoId ?? business.defaultLogoId ?? null}
-                onSelectLogo={(logoId) => update({ logoId })}
-                onChange={(next) => {
-                  void saveBusiness(next).then(() => {
-                    void refreshPreview({
-                      ...invoice,
-                      logoId:
-                        invoice.logoId === undefined
-                          ? next.defaultLogoId ?? null
-                          : invoice.logoId,
-                    });
-                  });
-                }}
-              />
-            ) : null}
 
             <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2.5 sm:px-4">

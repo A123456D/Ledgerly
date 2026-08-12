@@ -23,8 +23,8 @@ export async function importCanvaTemplate(
     source: "canva",
     backgroundDataUrl,
     accentColor,
-    contentTopMm: 52,
-    contentStyle: "card",
+    contentTopMm: 45,
+    contentStyle: "transparent",
     createdAt: new Date().toISOString(),
   };
   await db.customTemplates.put(template);
