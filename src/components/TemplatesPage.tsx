@@ -55,9 +55,8 @@ export function TemplatesPage() {
           Import from Canva
         </h2>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-[var(--muted)]">
-          <li>In Canva, design your invoice letterhead (A4).</li>
-          <li>Download as PNG or JPG (PDF pages work after exporting as image).</li>
-          <li>Upload here — we sample your colors and lay invoice fields on top.</li>
+          <li>In Canva, export the top banner (logos + branding) as PNG.</li>
+          <li>Upload here — we use it as the header; enter line items in the invoice editor.</li>
         </ol>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button type="button" disabled={busy} onClick={() => inputRef.current?.click()}>
