@@ -163,6 +163,7 @@ export async function createDraftInvoice(options?: {
   let taxMode = business.taxMode;
   let currency = business.currency;
   let logoId: string | null | undefined = business.defaultLogoId;
+  let logoSizePx = business.defaultLogoSizePx;
   let visibility = undefined as Invoice["visibility"];
 
   if (options?.fromInvoiceId) {
@@ -183,6 +184,7 @@ export async function createDraftInvoice(options?: {
       taxMode = source.taxMode;
       currency = source.currency;
       logoId = source.logoId ?? business.defaultLogoId;
+      logoSizePx = source.logoSizePx ?? business.defaultLogoSizePx;
       visibility = source.visibility ? { ...source.visibility } : undefined;
     }
   } else if (options?.clientId) {
@@ -207,6 +209,7 @@ export async function createDraftInvoice(options?: {
     accentColor,
     fontPair,
     logoId,
+    logoSizePx,
     notes,
     paymentInstructions,
     lineItems,
@@ -319,6 +322,7 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     lineItems: linked.lineItems.map((l) => ({ ...l })),
     totals,
     visibility: linked.visibility ? { ...linked.visibility } : undefined,
+    logoSizePx: linked.logoSizePx ?? business.defaultLogoSizePx,
   };
 
   const issued: Invoice = {
@@ -417,6 +421,7 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
       totals: invoice.snapshot.totals,
       status: invoice.status,
       visibility: invoice.snapshot.visibility ?? invoice.visibility,
+      logoSizePx: invoice.snapshot.logoSizePx ?? invoice.logoSizePx,
       customTemplate: customFromSnapshot(invoice.snapshot),
     };
   }
@@ -437,6 +442,7 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
     templateId: invoice.templateId,
     accentColor: invoice.accentColor,
     fontPair: invoice.fontPair,
+    logoSizePx: invoice.logoSizePx,
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,
     notes: invoice.notes,
@@ -484,6 +490,7 @@ export async function displayDocumentLive(
     templateId: invoice.templateId,
     accentColor: accent,
     fontPair: invoice.fontPair ?? business.fontPair,
+    logoSizePx: invoice.logoSizePx ?? business.defaultLogoSizePx,
     logoDataUrl: resolveLogoDataUrl(business, logoId),
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,

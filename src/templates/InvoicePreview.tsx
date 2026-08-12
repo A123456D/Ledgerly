@@ -14,9 +14,11 @@ import { isVisible, resolveVisibility } from "@/lib/invoice-visibility";
 import { formatDate, formatMoney } from "@/lib/format";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "@/lib/templates/catalog";
 import { fontPairCssVars } from "@/lib/fonts";
+import { clampLogoSizePx, DEFAULT_LOGO_SIZE_PX } from "@/lib/logo-size";
 
 const LogoVisibleCtx = createContext(true);
 const FontPairCtx = createContext<FontPair>("editorial");
+const LogoSizeCtx = createContext(DEFAULT_LOGO_SIZE_PX);
 
 export interface InvoiceViewModel {
   number: string;
@@ -32,6 +34,8 @@ export interface InvoiceViewModel {
   templateId: TemplateId;
   accentColor: string;
   fontPair?: FontPair;
+  /** Logo edge length in CSS px on the A4 sheet */
+  logoSizePx?: number;
   logoDataUrl?: string;
   issueDate: string;
   dueDate: string;
@@ -196,9 +200,11 @@ function Logo({
   src,
   name,
   accent,
-  className = "h-40 w-40",
+  className = "",
   invert,
   rounded = "rounded-xl",
+  /** Wide logos keep height from the size control and grow horizontally. */
+  wide = false,
 }: {
   src?: string;
   name: string;
@@ -206,26 +212,66 @@ function Logo({
   className?: string;
   invert?: boolean;
   rounded?: string;
+  wide?: boolean;
 }) {
   const logoVisible = useContext(LogoVisibleCtx);
+  const size = useContext(LogoSizeCtx);
   if (!logoVisible) return null;
   if (!src && !name) return null;
+
+  const boxStyle: CSSProperties = wide
+    ? {
+        height: size,
+        width: "auto",
+        maxWidth: Math.round(size * 2.8),
+      }
+    : {
+        width: size,
+        height: size,
+      };
+
   if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt=""
-        className={`shrink-0 ${className} ${rounded} object-contain ${invert ? "brightness-0 invert" : ""}`}
+        className={`shrink-0 ${rounded} object-contain ${invert ? "brightness-0 invert" : ""} ${className}`}
+        style={boxStyle}
       />
     );
   }
   return (
     <div
-      className={`flex shrink-0 items-center justify-center text-3xl font-bold text-white ${rounded} ${className}`}
-      style={{ background: accent }}
+      className={`flex shrink-0 items-center justify-center font-bold text-white ${rounded} ${className}`}
+      style={{
+        ...boxStyle,
+        background: accent,
+        fontSize: Math.max(18, Math.round(size * 0.42)),
+      }}
     >
       {(name || "L").slice(0, 1).toUpperCase()}
+    </div>
+  );
+}
+
+/** Circular/square frame that tracks the logo size control. */
+function LogoFrame({
+  className = "",
+  style,
+  children,
+}: {
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  const size = useContext(LogoSizeCtx);
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center ${className}`}
+      style={{ width: size, height: size, ...style }}
+    >
+      {children}
     </div>
   );
 }
@@ -467,7 +513,7 @@ function Classic({ doc, accent, logo }: Ctx) {
       <Orb className="-bottom-24 -left-16 h-48 w-48 opacity-[0.08]" color={accent} />
       <div className="relative flex min-w-0 items-start justify-between gap-6">
         <div className="flex min-w-0 flex-1 items-center gap-5">
-          <Logo src={logo} name={doc.business.name} accent={accent} className="h-40 w-40" />
+          <Logo src={logo} name={doc.business.name} accent={accent} />
           <div className="min-w-0">
             <h1 className="truncate font-[family-name:var(--font-display)] text-[1.75rem] font-semibold tracking-tight">
               {doc.business.name || "Your business"}
@@ -518,7 +564,7 @@ function Minimal({ doc, accent, logo }: Ctx) {
     <Sheet className="bg-white text-[#111] font-[family-name:var(--font-body)]">
       <div className="flex items-end justify-between border-b border-neutral-200 pb-10">
         <div>
-          <Logo src={logo} name={doc.business.name} accent={accent} className="mb-8 h-36 w-auto max-w-[320px] rounded-none" />
+          <Logo src={logo} name={doc.business.name} accent={accent} className="mb-8" rounded="rounded-none" wide />
           <p className="text-[11px] uppercase tracking-[0.4em] text-neutral-400">
             {doc.business.name || "Studio"}
           </p>
@@ -566,7 +612,7 @@ function Bold({ doc, accent, logo }: Ctx) {
         <div className="relative flex flex-col justify-between p-8 text-white" style={{ background: accent }}>
           <Orb className="-left-10 top-24 h-40 w-40 opacity-100" color="rgba(255,255,255,0.12)" />
           <div>
-            <Logo src={logo} name={doc.business.name} accent="#fff" className="h-36 w-36" invert={!!logo} rounded="rounded-2xl" />
+            <Logo src={logo} name={doc.business.name} accent="#fff" invert={!!logo} rounded="rounded-2xl" />
             <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl font-bold leading-tight">
               {doc.business.name || "Studio"}
             </h1>
@@ -602,9 +648,9 @@ function Atelier({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-[#faf6f0] text-[#2a211c] font-[family-name:var(--font-display)]">
       <div className="text-center">
-        <div className="mx-auto flex h-40 w-40 items-center justify-center rounded-full ring-1 ring-black/10" style={{ background: `${accent}18` }}>
-          <Logo src={logo} name={doc.business.name} accent={accent} className="h-32 w-32 rounded-full" />
-        </div>
+        <LogoFrame className="mx-auto rounded-full ring-1 ring-black/10" style={{ background: `${accent}18` }}>
+          <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-full" />
+        </LogoFrame>
         <h1 className="mt-5 text-3xl font-semibold tracking-tight">
           {doc.business.name || "Atelier"}
         </h1>
@@ -639,7 +685,7 @@ function Nordic({ doc, accent, logo }: Ctx) {
       <div className="px-10 py-7 text-white" style={{ background: accent }}>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Logo src={logo} name={doc.business.name} accent="#fff" className="h-36 w-36" invert={!!logo} />
+            <Logo src={logo} name={doc.business.name} accent="#fff" invert={!!logo} />
             <h1 className="text-2xl font-bold tracking-tight">{doc.business.name || "Company"}</h1>
           </div>
           <div className="rounded-lg bg-white/15 px-4 py-2 text-right backdrop-blur">
@@ -680,7 +726,7 @@ function Midnight({ doc, accent, logo }: Ctx) {
       <Orb className="bottom-10 left-10 h-40 w-40 opacity-20 blur-2xl" color="#22d3ee" />
       <div className="relative flex items-start justify-between gap-6">
         <div>
-          <Logo src={logo} name={doc.business.name} accent={accent} className="h-36 w-auto max-w-[320px]" />
+          <Logo src={logo} name={doc.business.name} accent={accent} wide />
           <h1 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-semibold">
             {doc.business.name || "Midnight"}
           </h1>
@@ -719,7 +765,7 @@ function Coral({ doc, accent, logo }: Ctx) {
       <div className="relative overflow-hidden rounded-[28px] bg-white shadow-[0_20px_50px_rgba(225,29,72,0.08)] ring-1 ring-rose-100">
         <div className="flex items-center justify-between gap-4 px-7 py-6" style={{ background: `linear-gradient(120deg, ${accent}18, #fda4af33)` }}>
           <div className="flex items-center gap-3">
-            <Logo src={logo} name={doc.business.name} accent={accent} className="h-36 w-36" rounded="rounded-2xl" />
+            <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-2xl" />
             <div>
               <h1 className="text-xl font-semibold">{doc.business.name || "Studio"}</h1>
               <p className="text-xs opacity-50">{doc.business.email}</p>
@@ -762,7 +808,7 @@ function Slate({ doc, accent, logo }: Ctx) {
         <div className="invoice-pad">
           <div className="flex items-start justify-between gap-6">
             <div className="flex gap-3">
-              <Logo src={logo} name={doc.business.name} accent={accent} className="h-36 w-36" rounded="rounded-md" />
+              <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-md" />
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">{doc.business.name || "Advisory"}</h1>
                 <p className="mt-1 font-[family-name:var(--font-mono)] text-[11px] text-slate-500">
@@ -808,12 +854,9 @@ function Luxe({ doc, accent, logo }: Ctx) {
     <Sheet className="bg-[#0c0a09] text-[#f5efe6] font-[family-name:var(--font-display)]">
       <div className="border px-7 py-9" style={{ borderColor: `${accent}55` }}>
         <div className="text-center">
-          <div
-            className="mx-auto flex h-40 w-40 items-center justify-center rounded-full"
-            style={{ boxShadow: `0 0 0 1px ${accent}` }}
-          >
-            <Logo src={logo} name={doc.business.name} accent={accent} className="h-32 w-32 rounded-full" />
-          </div>
+          <LogoFrame className="mx-auto rounded-full" style={{ boxShadow: `0 0 0 1px ${accent}` }}>
+            <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-full" />
+          </LogoFrame>
           <p className="mt-6 text-[11px] uppercase tracking-[0.5em]" style={{ color: accent }}>
             Private invoice
           </p>
@@ -858,7 +901,7 @@ function Meadow({ doc, accent, logo }: Ctx) {
       <Orb className="right-8 top-24 h-32 w-32 opacity-25" color="#86efac" />
       <div className="relative flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Logo src={logo} name={doc.business.name} accent={accent} className="h-36 w-36" rounded="rounded-full" />
+          <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-full" />
           <div>
             <h1 className="text-2xl font-semibold">{doc.business.name || "Meadow"}</h1>
             <p className="text-sm opacity-55">{doc.business.email}</p>
@@ -902,7 +945,7 @@ function Ink({ doc, accent, logo }: Ctx) {
         </p>
         <div className="flex items-start justify-between gap-6">
           <div>
-            <Logo src={logo} name={doc.business.name} accent={accent} className="h-36 w-36" rounded="rounded-none" />
+            <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-none" />
             <h1 className="mt-5 text-3xl font-black uppercase tracking-tight">
               {doc.business.name || "Ink Co"}
             </h1>
@@ -947,7 +990,7 @@ function Studio({ doc, accent, logo }: Ctx) {
         <Orb className="right-10 top-6 h-28 w-28 opacity-100" color="rgba(255,255,255,0.2)" />
         <div className="relative flex items-start justify-between gap-4">
           <div>
-            <Logo src={logo} name={doc.business.name} accent="#fff" className="h-36 w-auto max-w-[320px]" invert={!!logo} />
+            <Logo src={logo} name={doc.business.name} accent="#fff" invert={!!logo} wide />
             <h1 className="mt-6 font-[family-name:var(--font-display)] text-4xl font-bold leading-none tracking-tight">
               {doc.business.name || "Studio"}
             </h1>
@@ -987,7 +1030,7 @@ function Harbor({ doc, accent, logo }: Ctx) {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-white/10 p-2">
-              <Logo src={logo} name={doc.business.name} accent={brass} className="h-32 w-32" invert={!!logo} />
+              <Logo src={logo} name={doc.business.name} accent={brass} invert={!!logo} />
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">{doc.business.name || "Harbor"}</h1>
@@ -1035,7 +1078,7 @@ function Parchment({ doc, accent, logo }: Ctx) {
       <div className="relative">
         <div className="flex items-start justify-between gap-6">
           <div className="flex gap-3">
-            <Logo src={logo} name={doc.business.name} accent={accent} className="h-36 w-36" rounded="rounded-sm" />
+            <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-sm" />
             <div>
               <h1 className="text-2xl font-semibold">{doc.business.name || "Parchment"}</h1>
               <Party
@@ -1094,7 +1137,7 @@ function CanvaCopy({ doc, accent, logo }: Ctx & { custom?: CustomTemplate | null
             src={logo}
             name={doc.business.name}
             accent={useAccent}
-            className="h-36 w-auto max-w-[320px]"
+            wide
           />
           <div className="min-w-0 text-right">
             <ReferenceBlock doc={doc} accent={useAccent} numberClassName="text-lg" />
@@ -1209,7 +1252,9 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
   return (
     <LogoVisibleCtx.Provider value={visibility.logo}>
       <FontPairCtx.Provider value={view.fontPair || "editorial"}>
-        {tree}
+        <LogoSizeCtx.Provider value={clampLogoSizePx(view.logoSizePx)}>
+          {tree}
+        </LogoSizeCtx.Provider>
       </FontPairCtx.Provider>
     </LogoVisibleCtx.Provider>
   );

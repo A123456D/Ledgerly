@@ -12,6 +12,12 @@ import {
 } from "@/lib/logos";
 import type { Business } from "@/lib/types";
 import { Button, inputClass } from "@/components/ui";
+import {
+  clampLogoSizePx,
+  DEFAULT_LOGO_SIZE_PX,
+  MAX_LOGO_SIZE_PX,
+  MIN_LOGO_SIZE_PX,
+} from "@/lib/logo-size";
 
 export function LogoLibrary({
   business,
@@ -20,6 +26,8 @@ export function LogoLibrary({
   selectedLogoId,
   onSelectLogo,
   allowNone = false,
+  logoSizePx,
+  onLogoSizeChange,
 }: {
   business: Business;
   onChange: (next: Business) => void;
@@ -28,6 +36,9 @@ export function LogoLibrary({
   selectedLogoId?: string | null;
   onSelectLogo?: (logoId: string | null) => void;
   allowNone?: boolean;
+  /** When set, shows a size slider for the invoice preview */
+  logoSizePx?: number;
+  onLogoSizeChange?: (px: number) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
@@ -196,6 +207,30 @@ export function LogoLibrary({
         ) : (
           <p className="mb-3 text-sm text-[var(--muted)]">No logos yet.</p>
         )}
+
+        {onLogoSizeChange ? (
+          <div className="mb-3 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2">
+            <label className="flex items-center justify-between gap-3 text-xs text-[var(--muted)]">
+              <span>Logo size on invoice</span>
+              <span className="tabular-nums text-[var(--ink)]">
+                {clampLogoSizePx(logoSizePx ?? DEFAULT_LOGO_SIZE_PX)}px
+              </span>
+            </label>
+            <input
+              type="range"
+              min={MIN_LOGO_SIZE_PX}
+              max={MAX_LOGO_SIZE_PX}
+              step={4}
+              value={clampLogoSizePx(logoSizePx ?? DEFAULT_LOGO_SIZE_PX)}
+              onChange={(e) => onLogoSizeChange(Number(e.target.value))}
+              className="mt-1 w-full accent-[var(--accent)]"
+            />
+            <div className="mt-1 flex justify-between text-[11px] text-[var(--muted)]">
+              <span>Small</span>
+              <span>Large</span>
+            </div>
+          </div>
+        ) : null}
 
         {logos.length > 0 ? (
           <div className="mb-3 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2">

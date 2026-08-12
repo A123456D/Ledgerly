@@ -61,6 +61,8 @@ export interface Business {
   defaultLogoId?: string;
   accentColor: string;
   fontPair: FontPair;
+  /** Default logo print size in px (48–240) */
+  defaultLogoSizePx?: number;
   currency: string;
   defaultTaxRate: number;
   taxMode: TaxMode;
@@ -153,6 +155,8 @@ export interface IssuedSnapshot {
   totals: InvoiceTotals;
   /** Frozen print visibility at issue time */
   visibility?: InvoiceVisibility;
+  /** Frozen logo size at issue time */
+  logoSizePx?: number;
 }
 
 export interface Invoice {
@@ -169,6 +173,8 @@ export interface Invoice {
   accentColor: string;
   /** Typography pair for this invoice; falls back to business default */
   fontPair?: FontPair;
+  /** Logo print size in px (48–240); falls back to business default */
+  logoSizePx?: number;
   /** Which saved business logo to print; null = none */
   logoId?: string | null;
   notes: string;

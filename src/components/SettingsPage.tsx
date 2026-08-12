@@ -214,6 +214,10 @@ export function SettingsPage() {
               setForm(next);
               setSaved(false);
             }}
+            logoSizePx={form.defaultLogoSizePx}
+            onLogoSizeChange={(defaultLogoSizePx) =>
+              patch("defaultLogoSizePx", defaultLogoSizePx)
+            }
           />
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">

@@ -579,6 +579,12 @@ export function InvoiceEditor({ id }: { id: string }) {
                     : invoice.logoId ?? business.defaultLogoId ?? null
                 }
                 onSelectLogo={(logoId) => update({ logoId })}
+                logoSizePx={
+                  invoice.logoSizePx ??
+                  business.defaultLogoSizePx ??
+                  120
+                }
+                onLogoSizeChange={(logoSizePx) => update({ logoSizePx })}
                 onChange={(next) => {
                   void saveBusiness(next).then(() => {
                     void refreshPreview({
