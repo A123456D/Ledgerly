@@ -5,6 +5,7 @@ import {
   Source_Sans_3,
   IBM_Plex_Mono,
   Outfit,
+  Lora,
 } from "next/font/google";
 import { AppShell } from "@/components/ui";
 import "./globals.css";
@@ -21,6 +22,11 @@ const body = Source_Sans_3({
 
 const modern = Outfit({
   variable: "--font-modern",
+  subsets: ["latin"],
+});
+
+const classicDisplay = Lora({
+  variable: "--font-classic-display",
   subsets: ["latin"],
 });
 
@@ -70,7 +76,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} ${modern.variable} ${mono.variable} h-full antialiased`}
+      className={`${display.variable} ${body.variable} ${modern.variable} ${classicDisplay.variable} ${mono.variable} h-full antialiased`}
       style={rootFontVars}
     >
       <body className="min-h-full flex flex-col">

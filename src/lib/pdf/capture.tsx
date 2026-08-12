@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { domToPng } from "modern-screenshot";
 import { jsPDF } from "jspdf";
+import { applySmartPageBreaks } from "@/lib/pdf/page-breaks";
 import {
   InvoicePreview,
   type InvoiceViewModel,
@@ -127,6 +128,9 @@ async function captureLivePreviewSheet(): Promise<Blob | null> {
     await document.fonts?.ready;
     await sleep(80);
 
+    applySmartPageBreaks(clone, A4_H_PX);
+    await sleep(40);
+
     const dataUrl = await captureNode(clone);
     return pngToPdfBlob(dataUrl);
   } finally {
@@ -177,6 +181,9 @@ async function captureRemountedPreview(doc: InvoiceViewModel): Promise<Blob> {
     sheet.style.width = `${A4_W_PX}px`;
     sheet.style.maxWidth = `${A4_W_PX}px`;
     sheet.style.minHeight = `${A4_H_PX}px`;
+
+    applySmartPageBreaks(sheet, A4_H_PX);
+    await sleep(40);
 
     const dataUrl = await captureNode(sheet);
     return pngToPdfBlob(dataUrl);

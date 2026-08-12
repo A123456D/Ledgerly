@@ -7,6 +7,11 @@ export const FONT_PAIR_OPTIONS: {
   blurb: string;
 }[] = [
   {
+    id: "classic",
+    label: "Classic",
+    blurb: "Traditional serif — formal invoices",
+  },
+  {
     id: "editorial",
     label: "Editorial",
     blurb: "Serif headlines + clean sans body",
@@ -43,6 +48,11 @@ export const ACCENT_PRESETS = [
  */
 export function fontPairCssVars(pair: FontPair = "editorial"): CSSProperties {
   switch (pair) {
+    case "classic":
+      return {
+        ["--font-display" as string]: "var(--font-classic-display)",
+        ["--font-body" as string]: "var(--font-editorial-body)",
+      };
     case "modern":
       return {
         ["--font-display" as string]: "var(--font-modern)",

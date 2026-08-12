@@ -4,6 +4,7 @@ import { Field, inputClass } from "@/components/ui";
 import {
   ACCENT_PRESETS,
   FONT_PAIR_OPTIONS,
+  fontPairCssVars,
 } from "@/lib/fonts";
 import type { FontPair } from "@/lib/types";
 
@@ -65,14 +66,41 @@ export function BrandLookControls({
       </div>
 
       <Field label="Font">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {FONT_PAIR_OPTIONS.map((opt) => {
+            const active = fontPair === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => onFontChange(opt.id)}
+                className={`rounded-lg border px-3 py-2.5 text-left transition ${
+                  active
+                    ? "border-[var(--accent)] bg-teal-50/60 ring-2 ring-[var(--accent)]/20"
+                    : "border-[var(--line)] bg-[var(--panel)] hover:border-[var(--muted)]"
+                }`}
+                style={fontPairCssVars(opt.id)}
+              >
+                <p className="font-[family-name:var(--font-display)] text-lg leading-tight">
+                  Invoice Aa
+                </p>
+                <p className="mt-0.5 font-[family-name:var(--font-body)] text-xs text-[var(--muted)]">
+                  {opt.label} · {opt.blurb}
+                </p>
+              </button>
+            );
+          })}
+        </div>
         <select
-          className={inputClass}
+          className={inputClass + " mt-2 hidden"}
           value={fontPair}
           onChange={(e) => onFontChange(e.target.value as FontPair)}
+          aria-hidden
+          tabIndex={-1}
         >
           {FONT_PAIR_OPTIONS.map((opt) => (
             <option key={opt.id} value={opt.id}>
-              {opt.label} — {opt.blurb}
+              {opt.label}
             </option>
           ))}
         </select>

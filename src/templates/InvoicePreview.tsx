@@ -353,9 +353,7 @@ function FancyTable({
       </thead>
       <tbody>
         {doc.lineItems.map((line, i) => (
-          <tr
-            key={line.id}
-            className={
+          <tr key={line.id} data-invoice-avoid-break className={
               mode === "dark"
                 ? "border-b border-white/10"
                 : i % 2 === 1
@@ -447,6 +445,7 @@ function Notes({
   // Keep banking / notes fully readable on PDF & WhatsApp (no heavy fade)
   return (
     <div
+      data-invoice-avoid-break
       className={`mt-10 grid gap-6 border-t pt-7 text-[13px] sm:grid-cols-2 ${light ? "border-white/15 text-white/90" : "border-black/10 text-[#1c1917]"}`}
     >
       {notes ? (
@@ -461,6 +460,26 @@ function Notes({
           <p className="mt-2 whitespace-pre-wrap leading-relaxed">{payment}</p>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Totals + notes/payment — kept together on PDF page breaks. */
+function InvoiceClosing({
+  doc,
+  accent,
+  light,
+  invert,
+}: {
+  doc: InvoiceViewModel;
+  accent: string;
+  light?: boolean;
+  invert?: boolean;
+}) {
+  return (
+    <div data-invoice-avoid-break>
+      <DueCard doc={doc} accent={accent} invert={invert} />
+      <Notes doc={doc} light={light} />
     </div>
   );
 }
@@ -511,7 +530,7 @@ function Classic({ doc, accent, logo }: Ctx) {
     <Sheet className="bg-[#fffdf9] text-[#1c1917] font-[family-name:var(--font-body)]">
       <Orb className="-right-16 -top-20 h-56 w-56 opacity-[0.14]" color={accent} />
       <Orb className="-bottom-24 -left-16 h-48 w-48 opacity-[0.08]" color={accent} />
-      <div className="relative flex min-w-0 items-start justify-between gap-6">
+      <div className="relative flex min-w-0 items-start justify-between gap-6" data-invoice-avoid-break>
         <div className="flex min-w-0 flex-1 items-center gap-5">
           <Logo src={logo} name={doc.business.name} accent={accent} />
           <div className="min-w-0">
@@ -552,8 +571,7 @@ function Classic({ doc, accent, logo }: Ctx) {
         </Gate>
       </div>
       <FancyTable doc={doc} accent={accent} mode="soft" />
-      <DueCard doc={doc} accent={accent} />
-      <Notes doc={doc} />
+      <InvoiceClosing doc={doc} accent={accent} />
     </Sheet>
   );
 }
@@ -593,7 +611,7 @@ function Minimal({ doc, accent, logo }: Ctx) {
         </div>
       </div>
       <FancyTable doc={doc} accent={accent} mode="lined" />
-      <div className="ml-auto mt-8 w-60 border border-neutral-900 p-4">
+      <div className="ml-auto mt-8 w-60 border border-neutral-900 p-4" data-invoice-avoid-break>
         <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Amount due</p>
         <p className="mt-1 text-2xl font-semibold tabular-nums">
           {formatMoney(doc.totals.total, doc.currency)}
@@ -633,9 +651,8 @@ function Bold({ doc, accent, logo }: Ctx) {
             <Party p={doc.client} className="mt-2 text-base" />
           </div>
           <FancyTable doc={doc} accent={accent} mode="soft" />
-          <DueCard doc={doc} accent={accent} />
           <div className="mt-auto">
-            <Notes doc={doc} />
+            <InvoiceClosing doc={doc} accent={accent} />
           </div>
         </div>
       </div>
@@ -672,8 +689,7 @@ function Atelier({ doc, accent, logo }: Ctx) {
         </div>
       </div>
       <FancyTable doc={doc} accent={accent} mode="soft" />
-      <DueCard doc={doc} accent={accent} />
-      <Notes doc={doc} />
+      <InvoiceClosing doc={doc} accent={accent} />
     </Sheet>
   );
 }
@@ -711,8 +727,7 @@ function Nordic({ doc, accent, logo }: Ctx) {
           </div>
         </div>
         <FancyTable doc={doc} accent={accent} mode="soft" />
-        <DueCard doc={doc} accent={accent} />
-        <Notes doc={doc} />
+        <InvoiceClosing doc={doc} accent={accent} />
       </div>
     </Sheet>
   );
@@ -750,8 +765,7 @@ function Midnight({ doc, accent, logo }: Ctx) {
         </div>
       </div>
       <FancyTable doc={doc} accent={accent} mode="dark" />
-      <DueCard doc={doc} accent={accent} />
-      <Notes doc={doc} light />
+      <InvoiceClosing doc={doc} accent={accent} light />
     </Sheet>
   );
 }
@@ -791,8 +805,7 @@ function Coral({ doc, accent, logo }: Ctx) {
         </div>
         <div className="px-5 pb-7 font-[family-name:var(--font-body)]">
           <FancyTable doc={doc} accent={accent} mode="soft" />
-          <DueCard doc={doc} accent={accent} />
-          <Notes doc={doc} />
+          <InvoiceClosing doc={doc} accent={accent} />
         </div>
       </div>
     </Sheet>
@@ -840,8 +853,7 @@ function Slate({ doc, accent, logo }: Ctx) {
             </div>
           </div>
           <FancyTable doc={doc} accent={accent} mode="soft" />
-          <DueCard doc={doc} accent={accent} />
-          <Notes doc={doc} />
+          <InvoiceClosing doc={doc} accent={accent} />
         </div>
       </div>
     </Sheet>
@@ -882,8 +894,7 @@ function Luxe({ doc, accent, logo }: Ctx) {
         </div>
         <div className="font-[family-name:var(--font-body)]">
           <FancyTable doc={doc} accent={accent} mode="gold" />
-          <DueCard doc={doc} accent={accent} />
-          <Notes doc={doc} light />
+          <InvoiceClosing doc={doc} accent={accent} light />
         </div>
       </div>
     </Sheet>
@@ -927,8 +938,7 @@ function Meadow({ doc, accent, logo }: Ctx) {
       </div>
       <div className="font-[family-name:var(--font-body)]">
         <FancyTable doc={doc} accent={accent} mode="soft" />
-        <DueCard doc={doc} accent={accent} />
-        <Notes doc={doc} />
+        <InvoiceClosing doc={doc} accent={accent} />
       </div>
     </Sheet>
   );
@@ -968,8 +978,7 @@ function Ink({ doc, accent, logo }: Ctx) {
         </div>
         <div className="font-[family-name:var(--font-body)]">
           <FancyTable doc={doc} accent={accent} mode="solid" />
-          <DueCard doc={doc} accent={accent} />
-          <Notes doc={doc} />
+          <InvoiceClosing doc={doc} accent={accent} />
         </div>
       </div>
     </Sheet>
@@ -1014,8 +1023,7 @@ function Studio({ doc, accent, logo }: Ctx) {
           </div>
         </div>
         <FancyTable doc={doc} accent={accent} mode="soft" />
-        <DueCard doc={doc} accent={accent} />
-        <Notes doc={doc} />
+        <InvoiceClosing doc={doc} accent={accent} />
       </div>
     </Sheet>
   );
@@ -1062,8 +1070,7 @@ function Harbor({ doc, accent, logo }: Ctx) {
           </div>
         </div>
         <FancyTable doc={doc} accent={accent} mode="soft" />
-        <DueCard doc={doc} accent={accent} />
-        <Notes doc={doc} />
+        <InvoiceClosing doc={doc} accent={accent} />
       </div>
     </Sheet>
   );
@@ -1103,8 +1110,7 @@ function Parchment({ doc, accent, logo }: Ctx) {
         </div>
         <div className="font-[family-name:var(--font-body)]">
           <FancyTable doc={doc} accent={accent} mode="soft" />
-          <DueCard doc={doc} accent={accent} />
-          <Notes doc={doc} />
+          <InvoiceClosing doc={doc} accent={accent} />
         </div>
       </div>
     </Sheet>
@@ -1164,8 +1170,7 @@ function CanvaCopy({ doc, accent, logo }: Ctx & { custom?: CustomTemplate | null
           </Gate>
         </div>
         <FancyTable doc={doc} accent={useAccent} mode="soft" />
-        <DueCard doc={doc} accent={useAccent} />
-        <Notes doc={doc} />
+        <InvoiceClosing doc={doc} accent={useAccent} />
       </div>
     </Sheet>
   );

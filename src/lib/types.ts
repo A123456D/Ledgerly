@@ -2,7 +2,7 @@ import type { InvoiceVisibility } from "@/lib/invoice-visibility";
 
 export type InvoiceStatus = "draft" | "issued" | "paid" | "void";
 export type TaxMode = "exclusive" | "inclusive";
-export type FontPair = "editorial" | "modern" | "mono";
+export type FontPair = "editorial" | "modern" | "mono" | "classic";
 
 export type { InvoiceVisibility };
 
