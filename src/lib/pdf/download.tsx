@@ -3,6 +3,7 @@
 import { createElement } from "react";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { formatDate, formatMoney } from "@/lib/format";
+import { resolveVisibility } from "@/lib/invoice-visibility";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "@/lib/templates/catalog";
 
 function lineAmount(doc: InvoiceViewModel, index: number): number {
@@ -29,8 +30,24 @@ export async function buildInvoicePdfBlob(
     pdf,
   } = await import("@react-pdf/renderer");
 
+  const visibility = resolveVisibility(doc.visibility);
   const accent = doc.accentColor || "#0f766e";
-  const logo = doc.logoDataUrl || doc.business.logoDataUrl;
+  const logo = visibility.logo
+    ? doc.logoDataUrl || doc.business.logoDataUrl
+    : undefined;
+  const issueDate =
+    visibility.issueDate && doc.issueDate
+      ? formatDate(doc.issueDate)
+      : "";
+  const dueDate =
+    visibility.dueDate && doc.dueDate ? formatDate(doc.dueDate) : "";
+  const number = visibility.invoiceNumber ? doc.number : "";
+  const notes = visibility.notes ? doc.notes : "";
+  const payment = visibility.payment ? doc.paymentInstructions : "";
+  const showVat = visibility.vat;
+  const showSubtotal = visibility.subtotal;
+  const showFrom = visibility.from;
+  const showBillTo = visibility.billTo;
   const custom = doc.customTemplate;
   const meta =
     !custom && isBuiltinTemplateId(doc.templateId)
@@ -142,18 +159,22 @@ export async function buildInvoicePdfBlob(
               View,
               null,
               createElement(Text, { style: styles.muted }, "Invoice"),
-              createElement(
-                Text,
-                { style: { fontSize: 14, color: accent, marginTop: 2 } },
-                doc.number,
-              ),
+              number
+                ? createElement(
+                    Text,
+                    { style: { fontSize: 14, color: accent, marginTop: 2 } },
+                    number,
+                  )
+                : null,
             ),
           ),
           createElement(
             View,
             { style: { alignItems: "flex-end" } },
-            createElement(Text, null, `Issued ${formatDate(doc.issueDate)}`),
-            createElement(Text, null, `Due ${formatDate(doc.dueDate)}`),
+            issueDate
+              ? createElement(Text, null, `Issued ${issueDate}`)
+              : null,
+            dueDate ? createElement(Text, null, `Due ${dueDate}`) : null,
           ),
         )
       : isBold || isDark
@@ -202,7 +223,7 @@ export async function buildInvoicePdfBlob(
                 createElement(
                   Text,
                   { style: { color: "#fff", fontSize: 16, marginTop: 4 } },
-                  doc.number,
+                  number,
                 ),
               ),
             ),
@@ -210,7 +231,8 @@ export async function buildInvoicePdfBlob(
         : createElement(
             View,
             { style: styles.row },
-            createElement(
+            showFrom
+              ? createElement(
               View,
               { style: { flexDirection: "row", gap: 12, maxWidth: "60%" } },
               logo
@@ -243,7 +265,13 @@ export async function buildInvoicePdfBlob(
                     .join("\n"),
                 ),
               ),
-            ),
+            )
+              : logo
+                ? createElement(Image, {
+                    src: logo,
+                    style: { height: 40, width: 40, objectFit: "contain" },
+                  })
+                : createElement(View, null),
             createElement(
               View,
               { style: { alignItems: "flex-end" } },
@@ -258,17 +286,21 @@ export async function buildInvoicePdfBlob(
                 },
                 "Invoice",
               ),
-              createElement(
-                Text,
-                { style: { marginTop: 6, fontSize: 12 } },
-                doc.number,
-              ),
-              createElement(
-                Text,
-                { style: { marginTop: 10 } },
-                `Issued ${formatDate(doc.issueDate)}`,
-              ),
-              createElement(Text, null, `Due ${formatDate(doc.dueDate)}`),
+              number
+                ? createElement(
+                    Text,
+                    { style: { marginTop: 6, fontSize: 12 } },
+                    number,
+                  )
+                : null,
+              issueDate
+                ? createElement(
+                    Text,
+                    { style: { marginTop: 10 } },
+                    `Issued ${issueDate}`,
+                  )
+                : null,
+              dueDate ? createElement(Text, null, `Due ${dueDate}`) : null,
             ),
           );
 
@@ -283,7 +315,8 @@ export async function buildInvoicePdfBlob(
         View,
         { style: contentCard },
         header,
-        createElement(
+        showBillTo
+          ? createElement(
           View,
           { style: { flexDirection: "row", marginTop: 20, gap: 24 } },
           createElement(
@@ -307,7 +340,8 @@ export async function buildInvoicePdfBlob(
                 .join("\n"),
             ),
           ),
-        ),
+        )
+          : null,
         createElement(
           View,
           {
@@ -323,35 +357,49 @@ export async function buildInvoicePdfBlob(
                 : {}),
             },
           },
-          ...(["Description", "Qty", "Price", "VAT", "Amount"] as const).map(
-            (label, i) =>
-              createElement(
+          ...(
+            (showVat
+              ? (["Description", "Qty", "Price", "VAT", "Amount"] as const)
+              : (["Description", "Qty", "Price", "Amount"] as const)
+            ).map((label, i, arr) => {
+              const colStyle =
+                label === "Description"
+                  ? showVat
+                    ? styles.colDesc
+                    : { width: "46%" }
+                  : label === "Qty"
+                    ? styles.colQty
+                    : label === "Price"
+                      ? styles.colPrice
+                      : label === "VAT"
+                        ? styles.colTax
+                        : showVat
+                          ? styles.colAmt
+                          : { width: "26%", textAlign: "right" as const };
+              return createElement(
                 Text,
                 {
                   key: label,
                   style: {
-                    ...(i === 0
-                      ? styles.colDesc
-                      : i === 1
-                        ? styles.colQty
-                        : i === 2
-                          ? styles.colPrice
-                          : i === 3
-                            ? styles.colTax
-                            : styles.colAmt),
+                    ...colStyle,
                     color: isBold || isDark ? "#fff" : isDark ? "#94a3b8" : "#78716c",
                     fontFamily: "Helvetica-Bold",
                   },
                 },
                 label,
-              ),
+              );
+            })
           ),
         ),
         ...doc.lineItems.map((line, i) =>
           createElement(
             View,
             { key: line.id, style: styles.tableRow, wrap: false },
-            createElement(Text, { style: styles.colDesc }, line.description || "—"),
+            createElement(
+              Text,
+              { style: showVat ? styles.colDesc : { width: "46%" } },
+              line.description || "—",
+            ),
             createElement(
               Text,
               { style: styles.colQty },
@@ -362,14 +410,20 @@ export async function buildInvoicePdfBlob(
               { style: styles.colPrice },
               formatMoney(line.unitPrice, doc.currency),
             ),
+            showVat
+              ? createElement(
+                  Text,
+                  { style: styles.colTax },
+                  `${line.taxRate || 0}%`,
+                )
+              : null,
             createElement(
               Text,
-              { style: styles.colTax },
-              `${line.taxRate || 0}%`,
-            ),
-            createElement(
-              Text,
-              { style: styles.colAmt },
+              {
+                style: showVat
+                  ? styles.colAmt
+                  : { width: "26%", textAlign: "right" as const },
+              },
               formatMoney(lineAmount(doc, i), doc.currency),
             ),
           ),
@@ -377,24 +431,28 @@ export async function buildInvoicePdfBlob(
         createElement(
           View,
           { style: styles.totals },
-          createElement(
-            View,
-            { style: styles.totalRow },
-            createElement(Text, null, "Subtotal"),
-            createElement(
-              Text,
-              null,
-              formatMoney(doc.totals.subtotal, doc.currency),
-            ),
-          ),
-          ...doc.totals.taxByRate.map((b) =>
-            createElement(
-              View,
-              { key: String(b.rate), style: styles.totalRow },
-              createElement(Text, null, `VAT ${b.rate}%`),
-              createElement(Text, null, formatMoney(b.tax, doc.currency)),
-            ),
-          ),
+          showSubtotal
+            ? createElement(
+                View,
+                { style: styles.totalRow },
+                createElement(Text, null, "Subtotal"),
+                createElement(
+                  Text,
+                  null,
+                  formatMoney(doc.totals.subtotal, doc.currency),
+                ),
+              )
+            : null,
+          ...(showVat
+            ? doc.totals.taxByRate.map((b) =>
+                createElement(
+                  View,
+                  { key: String(b.rate), style: styles.totalRow },
+                  createElement(Text, null, `VAT ${b.rate}%`),
+                  createElement(Text, null, formatMoney(b.tax, doc.currency)),
+                ),
+              )
+            : []),
           createElement(
             View,
             {
@@ -418,11 +476,11 @@ export async function buildInvoicePdfBlob(
             ),
           ),
         ),
-        doc.notes || doc.paymentInstructions
+        notes || payment
           ? createElement(
               View,
               { style: { marginTop: 28, flexDirection: "row", gap: 20 } },
-              doc.notes
+              notes
                 ? createElement(
                     View,
                     { style: { flex: 1 } },
@@ -430,11 +488,11 @@ export async function buildInvoicePdfBlob(
                     createElement(
                       Text,
                       { style: { marginTop: 6, lineHeight: 1.4 } },
-                      doc.notes,
+                      notes,
                     ),
                   )
                 : null,
-              doc.paymentInstructions
+              payment
                 ? createElement(
                     View,
                     { style: { flex: 1 } },
@@ -442,7 +500,7 @@ export async function buildInvoicePdfBlob(
                     createElement(
                       Text,
                       { style: { marginTop: 6, lineHeight: 1.4 } },
-                      doc.paymentInstructions,
+                      payment,
                     ),
                   )
                 : null,
@@ -452,7 +510,7 @@ export async function buildInvoicePdfBlob(
       createElement(
         View,
         { style: styles.footer, fixed: true },
-        createElement(Text, null, doc.number),
+        createElement(Text, null, number),
         createElement(Text, {
           render: ({
             pageNumber,

@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { createContext, useContext } from "react";
 import type {
   CustomTemplate,
   FontPair,
@@ -8,8 +9,12 @@ import type {
   TaxMode,
   TemplateId,
 } from "@/lib/types";
+import type { InvoiceVisibility } from "@/lib/invoice-visibility";
+import { isVisible, resolveVisibility } from "@/lib/invoice-visibility";
 import { formatDate, formatMoney } from "@/lib/format";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "@/lib/templates/catalog";
+
+const LogoVisibleCtx = createContext(true);
 
 export interface InvoiceViewModel {
   number: string;
@@ -33,7 +38,78 @@ export interface InvoiceViewModel {
   lineItems: LineItem[];
   totals: InvoiceTotals;
   status: string;
+  visibility?: InvoiceVisibility;
   customTemplate?: CustomTemplate | null;
+}
+
+function show(doc: InvoiceViewModel, field: Parameters<typeof isVisible>[1]) {
+  return isVisible(doc.visibility, field);
+}
+
+/** Issue / due lines — omitted when hidden or empty. */
+function DateMeta({
+  doc,
+  className = "",
+  issuePrefix = "",
+  duePrefix = "Due ",
+  sep = " · ",
+  stacked = false,
+  issueClassName,
+  dueClassName,
+}: {
+  doc: InvoiceViewModel;
+  className?: string;
+  issuePrefix?: string;
+  duePrefix?: string;
+  sep?: string;
+  stacked?: boolean;
+  issueClassName?: string;
+  dueClassName?: string;
+}) {
+  const issue =
+    show(doc, "issueDate") && doc.issueDate
+      ? `${issuePrefix}${formatDate(doc.issueDate)}`
+      : null;
+  const due =
+    show(doc, "dueDate") && doc.dueDate
+      ? `${duePrefix}${formatDate(doc.dueDate)}`
+      : null;
+  if (!issue && !due) return null;
+  if (stacked) {
+    return (
+      <div className={className}>
+        {issue ? <p className={issueClassName}>{issue}</p> : null}
+        {due ? <p className={dueClassName}>{due}</p> : null}
+      </div>
+    );
+  }
+  return <p className={className}>{[issue, due].filter(Boolean).join(sep)}</p>;
+}
+
+function InvoiceNumber({
+  doc,
+  className = "",
+  as: Tag = "p",
+}: {
+  doc: InvoiceViewModel;
+  className?: string;
+  as?: "p" | "span" | "div";
+}) {
+  if (!show(doc, "invoiceNumber") || !doc.number) return null;
+  return <Tag className={className}>{doc.number}</Tag>;
+}
+
+function Gate({
+  doc,
+  field,
+  children,
+}: {
+  doc: InvoiceViewModel;
+  field: Parameters<typeof isVisible>[1];
+  children: ReactNode;
+}) {
+  if (!show(doc, field)) return null;
+  return <>{children}</>;
 }
 
 /* ───────── primitives ───────── */
@@ -63,9 +139,11 @@ function Party({
   className?: string;
   light?: boolean;
 }) {
+  const lines = partyLines(p, phone);
+  if (!lines.length) return null;
   return (
     <div className={`space-y-0.5 text-[13px] leading-snug ${className}`}>
-      {partyLines(p, phone).map((line, i) => (
+      {lines.map((line, i) => (
         <p
           key={`${i}-${line}`}
           className={
@@ -98,6 +176,9 @@ function Logo({
   invert?: boolean;
   rounded?: string;
 }) {
+  const logoVisible = useContext(LogoVisibleCtx);
+  if (!logoVisible) return null;
+  if (!src && !name) return null;
   if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -167,21 +248,26 @@ function FancyTable({
             ? { background: "transparent", color: "#000", borderBottom: "2px solid #000" }
             : { background: `${accent}14`, color: "#334155" };
 
+  const showVat = show(doc, "vat");
+  const headers = showVat
+    ? ["Description", "Qty", "Rate", "VAT", "Amount"]
+    : ["Description", "Qty", "Rate", "Amount"];
+
   return (
     <table className="mt-6 w-full table-fixed border-collapse text-[13px]">
       <colgroup>
         <col className="w-auto" />
         <col className="w-[12%]" />
         <col className="w-[16%]" />
-        <col className="w-[10%]" />
+        {showVat ? <col className="w-[10%]" /> : null}
         <col className="w-[18%]" />
       </colgroup>
       <thead>
         <tr style={head}>
-          {["Description", "Qty", "Rate", "VAT", "Amount"].map((h, i) => (
+          {headers.map((h, i) => (
             <th
               key={h}
-              className={`px-2 py-3 text-[10px] font-bold uppercase tracking-[0.12em] ${i === 0 ? "text-left rounded-l-lg" : "text-right"} ${i === 4 ? "rounded-r-lg" : ""}`}
+              className={`px-2 py-3 text-[10px] font-bold uppercase tracking-[0.12em] ${i === 0 ? "text-left rounded-l-lg" : "text-right"} ${i === headers.length - 1 ? "rounded-r-lg" : ""}`}
             >
               {h}
             </th>
@@ -213,7 +299,9 @@ function FancyTable({
             <td className="px-1.5 py-3.5 text-right tabular-nums">
               {formatMoney(line.unitPrice, doc.currency)}
             </td>
-            <td className="px-1.5 py-3.5 text-right tabular-nums">{line.taxRate || 0}%</td>
+            {showVat ? (
+              <td className="px-1.5 py-3.5 text-right tabular-nums">{line.taxRate || 0}%</td>
+            ) : null}
             <td className="px-2 py-3.5 text-right font-semibold tabular-nums">
               {formatMoney(lineAmt(doc, line), doc.currency)}
             </td>
@@ -235,19 +323,23 @@ function DueCard({
 }) {
   return (
     <div className="ml-auto mt-6 w-[15.5rem] space-y-2 text-[13px]">
-      <div className={`flex justify-between ${invert ? "text-white/70" : "opacity-65"}`}>
-        <span>Subtotal</span>
-        <span className="tabular-nums">{formatMoney(doc.totals.subtotal, doc.currency)}</span>
-      </div>
-      {doc.totals.taxByRate.map((b) => (
-        <div
-          key={b.rate}
-          className={`flex justify-between ${invert ? "text-white/70" : "opacity-65"}`}
-        >
-          <span>VAT {b.rate}%</span>
-          <span className="tabular-nums">{formatMoney(b.tax, doc.currency)}</span>
+      {show(doc, "subtotal") ? (
+        <div className={`flex justify-between ${invert ? "text-white/70" : "opacity-65"}`}>
+          <span>Subtotal</span>
+          <span className="tabular-nums">{formatMoney(doc.totals.subtotal, doc.currency)}</span>
         </div>
-      ))}
+      ) : null}
+      {show(doc, "vat")
+        ? doc.totals.taxByRate.map((b) => (
+            <div
+              key={b.rate}
+              className={`flex justify-between ${invert ? "text-white/70" : "opacity-65"}`}
+            >
+              <span>VAT {b.rate}%</span>
+              <span className="tabular-nums">{formatMoney(b.tax, doc.currency)}</span>
+            </div>
+          ))
+        : null}
       <div
         className={`mt-2 rounded-2xl px-5 py-4 ${invert ? "bg-white text-slate-900" : "text-white"}`}
         style={invert ? undefined : { background: accent }}
@@ -272,23 +364,23 @@ function Notes({
   doc: InvoiceViewModel;
   light?: boolean;
 }) {
-  if (!doc.notes && !doc.paymentInstructions) return null;
+  const notes = show(doc, "notes") ? doc.notes : "";
+  const payment = show(doc, "payment") ? doc.paymentInstructions : "";
+  if (!notes && !payment) return null;
   return (
     <div
       className={`mt-10 grid gap-6 border-t pt-7 text-[13px] sm:grid-cols-2 ${light ? "border-white/15 text-white/80" : "border-black/10 opacity-80"}`}
     >
-      {doc.notes ? (
+      {notes ? (
         <div>
           <Label className={light ? "text-white/50" : "opacity-45"}>Notes</Label>
-          <p className="mt-2 whitespace-pre-wrap leading-relaxed">{doc.notes}</p>
+          <p className="mt-2 whitespace-pre-wrap leading-relaxed">{notes}</p>
         </div>
       ) : null}
-      {doc.paymentInstructions ? (
+      {payment ? (
         <div>
           <Label className={light ? "text-white/50" : "opacity-45"}>Payment</Label>
-          <p className="mt-2 whitespace-pre-wrap leading-relaxed">
-            {doc.paymentInstructions}
-          </p>
+          <p className="mt-2 whitespace-pre-wrap leading-relaxed">{payment}</p>
         </div>
       ) : null}
     </div>
@@ -356,21 +448,25 @@ function Classic({ doc, accent, logo }: Ctx) {
           >
             Invoice
           </p>
-          <p className="mt-1 text-sm font-medium tabular-nums">{doc.number}</p>
-          <p className="mt-3 text-xs opacity-55">
-            {formatDate(doc.issueDate)} · Due {formatDate(doc.dueDate)}
+          <p className="mt-1 text-sm font-medium tabular-nums">
+            <InvoiceNumber doc={doc} />
           </p>
+          <DateMeta doc={doc} className="mt-3 text-xs opacity-55" />
         </div>
       </div>
       <div className="relative mt-10 grid grid-cols-2 gap-4">
-        <div className="rounded-2xl bg-[#f6f1ea] p-5">
-          <Label className="opacity-45">From</Label>
-          <Party p={doc.business} phone={doc.business.phone} className="mt-2" />
-        </div>
-        <div className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
-          <Label className="opacity-45">Bill to</Label>
-          <Party p={doc.client} className="mt-2" />
-        </div>
+        <Gate doc={doc} field="from">
+          <div className="rounded-2xl bg-[#f6f1ea] p-5">
+            <Label className="opacity-45">From</Label>
+            <Party p={doc.business} phone={doc.business.phone} className="mt-2" />
+          </div>
+        </Gate>
+        <Gate doc={doc} field="billTo">
+          <div className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
+            <Label className="opacity-45">Bill to</Label>
+            <Party p={doc.client} className="mt-2" />
+          </div>
+        </Gate>
       </div>
       <FancyTable doc={doc} accent={accent} mode="soft" />
       <DueCard doc={doc} accent={accent} />
@@ -396,18 +492,21 @@ function Minimal({ doc, accent, logo }: Ctx) {
         </div>
       </div>
       <div className="mt-14 grid grid-cols-3 gap-10 text-[13px]">
-        <div>
-          <Label className="text-neutral-400">From</Label>
-          <Party p={doc.business} phone={doc.business.phone} className="mt-4" />
-        </div>
-        <div>
-          <Label className="text-neutral-400">Bill to</Label>
-          <Party p={doc.client} className="mt-4" />
-        </div>
+        <Gate doc={doc} field="from">
+          <div>
+            <Label className="text-neutral-400">From</Label>
+            <Party p={doc.business} phone={doc.business.phone} className="mt-4" />
+          </div>
+        </Gate>
+        <Gate doc={doc} field="billTo">
+          <div>
+            <Label className="text-neutral-400">Bill to</Label>
+            <Party p={doc.client} className="mt-4" />
+          </div>
+        </Gate>
         <div className="text-right">
           <Label className="text-neutral-400">Dates</Label>
-          <p className="mt-4">{formatDate(doc.issueDate)}</p>
-          <p className="mt-1 text-neutral-400">Due {formatDate(doc.dueDate)}</p>
+          <DateMeta doc={doc} stacked className="mt-4" dueClassName="mt-1 text-neutral-400" />
         </div>
       </div>
       <FancyTable doc={doc} accent={accent} mode="lined" />
@@ -442,11 +541,7 @@ function Bold({ doc, accent, logo }: Ctx) {
           <div>
             <Label className="text-white/60">Invoice</Label>
             <p className="mt-2 text-2xl font-bold tabular-nums">{doc.number}</p>
-            <p className="mt-3 text-sm text-white/70">
-              {formatDate(doc.issueDate)}
-              <br />
-              Due {formatDate(doc.dueDate)}
-            </p>
+            <DateMeta doc={doc} stacked className="mt-3 text-sm text-white/70" />
           </div>
         </div>
         <div className="invoice-pad flex flex-col">
@@ -481,9 +576,7 @@ function Atelier({ doc, accent, logo }: Ctx) {
           <span className="text-[11px] uppercase tracking-[0.35em]">Invoice {doc.number}</span>
           <span className="h-px w-12 bg-current" />
         </div>
-        <p className="mt-3 text-sm opacity-55">
-          {formatDate(doc.issueDate)} — {formatDate(doc.dueDate)}
-        </p>
+        <DateMeta doc={doc} className="mt-3 text-sm opacity-55" sep=" — " duePrefix="" />
       </div>
       <div className="mt-12 grid grid-cols-2 gap-12 text-sm">
         <div>
@@ -518,9 +611,11 @@ function Nordic({ doc, accent, logo }: Ctx) {
           </div>
         </div>
       </div>
+      {(show(doc, "issueDate") && doc.issueDate) || (show(doc, "dueDate") && doc.dueDate) ? (
       <div className="px-10 py-3 text-sm text-white/90" style={{ background: `${accent}cc` }}>
-        Issued {formatDate(doc.issueDate)} &nbsp;·&nbsp; Due {formatDate(doc.dueDate)}
+        <DateMeta doc={doc} issuePrefix="Issued " sep=" · " />
       </div>
+      ) : null}
       <div className="invoice-pad">
         <div className="grid grid-cols-2 gap-8">
           <div>
@@ -558,9 +653,7 @@ function Midnight({ doc, accent, logo }: Ctx) {
           <p className="mt-2 text-xl font-semibold tabular-nums" style={{ color: accent }}>
             {doc.number}
           </p>
-          <p className="mt-3 text-xs text-white/50">
-            {formatDate(doc.issueDate)} · {formatDate(doc.dueDate)}
-          </p>
+          <DateMeta doc={doc} className="mt-3 text-xs text-white/50" duePrefix="" />
         </div>
       </div>
       <div className="relative mt-10 grid grid-cols-2 gap-4">
@@ -610,8 +703,7 @@ function Coral({ doc, accent, logo }: Ctx) {
           </div>
           <div>
             <Label className="opacity-40">Dates</Label>
-            <p className="mt-2 font-medium">{formatDate(doc.issueDate)}</p>
-            <p className="opacity-55">Due {formatDate(doc.dueDate)}</p>
+            <DateMeta doc={doc} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
           </div>
         </div>
         <div className="px-5 pb-7 font-[family-name:var(--font-body)]">
@@ -661,8 +753,7 @@ function Slate({ doc, accent, logo }: Ctx) {
             </div>
             <div className="font-[family-name:var(--font-mono)] text-xs">
               <Label className="text-slate-400">Terms</Label>
-              <p className="mt-2">Issue {formatDate(doc.issueDate)}</p>
-              <p>Due {formatDate(doc.dueDate)}</p>
+              <DateMeta doc={doc} stacked className="mt-2" issuePrefix="Issue " />
             </div>
           </div>
           <FancyTable doc={doc} accent={accent} mode="soft" />
@@ -706,8 +797,7 @@ function Luxe({ doc, accent, logo }: Ctx) {
             <p className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
               Dates
             </p>
-            <p className="mt-3">{formatDate(doc.issueDate)}</p>
-            <p className="opacity-60">Due {formatDate(doc.dueDate)}</p>
+            <DateMeta doc={doc} stacked className="mt-3" dueClassName="opacity-60" />
           </div>
         </div>
         <div className="font-[family-name:var(--font-body)]">
@@ -751,8 +841,7 @@ function Meadow({ doc, accent, logo }: Ctx) {
         </div>
         <div className="rounded-[28px] bg-white/55 p-5 ring-1 ring-black/5">
           <Label className="opacity-40">Schedule</Label>
-          <p className="mt-2 text-sm font-medium">{formatDate(doc.issueDate)}</p>
-          <p className="text-sm opacity-60">Due {formatDate(doc.dueDate)}</p>
+          <DateMeta doc={doc} stacked className="mt-2 text-sm" issueClassName="font-medium" dueClassName="opacity-60" />
           <Party p={doc.business} phone={doc.business.phone} className="mt-4 text-xs" strong={false} />
         </div>
       </div>
@@ -784,9 +873,7 @@ function Ink({ doc, accent, logo }: Ctx) {
           <div className="text-right">
             <p className="text-5xl font-black tracking-tighter">INVOICE</p>
             <p className="mt-2 font-[family-name:var(--font-mono)] text-sm">{doc.number}</p>
-            <p className="mt-4 text-sm font-[family-name:var(--font-body)]">
-              {formatDate(doc.issueDate)} / {formatDate(doc.dueDate)}
-            </p>
+            <DateMeta doc={doc} className="mt-4 text-sm font-[family-name:var(--font-body)]" sep=" / " duePrefix="" />
           </div>
         </div>
         <div className="mt-10 grid grid-cols-2 gap-10 border-y-[3px] border-black py-6 font-[family-name:var(--font-body)] text-sm">
@@ -842,8 +929,7 @@ function Studio({ doc, accent, logo }: Ctx) {
           </div>
           <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
             <Label className="opacity-40">Dates</Label>
-            <p className="mt-2 font-medium">{formatDate(doc.issueDate)}</p>
-            <p className="opacity-55">Due {formatDate(doc.dueDate)}</p>
+            <DateMeta doc={doc} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
             <Party p={doc.business} phone={doc.business.phone} className="mt-4 text-xs" strong={false} />
           </div>
         </div>
@@ -892,8 +978,7 @@ function Harbor({ doc, accent, logo }: Ctx) {
           </div>
           <div>
             <Label className="text-slate-400">Schedule</Label>
-            <p className="mt-2 font-medium">{formatDate(doc.issueDate)}</p>
-            <p className="opacity-55">Due {formatDate(doc.dueDate)}</p>
+            <DateMeta doc={doc} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
           </div>
         </div>
         <FancyTable doc={doc} accent={accent} mode="soft" />
@@ -929,12 +1014,7 @@ function Parchment({ doc, accent, logo }: Ctx) {
               Statement of account
             </p>
             <p className="mt-2 text-lg font-semibold tabular-nums">{doc.number}</p>
-            <p className="mt-4 font-[family-name:var(--font-body)] text-sm">
-              Dated {formatDate(doc.issueDate)}
-            </p>
-            <p className="font-[family-name:var(--font-body)] text-sm opacity-70">
-              Payable by {formatDate(doc.dueDate)}
-            </p>
+            <DateMeta doc={doc} stacked className="mt-4 font-[family-name:var(--font-body)] text-sm" issuePrefix="Dated " duePrefix="Payable by " dueClassName="opacity-70" />
           </div>
         </div>
         <div className="mt-10 border border-[#7c2d12]/30 bg-[#fff8ea]/70 px-5 py-4 font-[family-name:var(--font-body)]">
@@ -982,27 +1062,30 @@ function CanvaCopy({ doc, accent, logo }: Ctx & { custom?: CustomTemplate | null
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <Logo src={logo} name={doc.business.name} accent={useAccent} className="h-10 w-auto max-w-[100px]" />
-              <div>
-                <Label className="text-neutral-500">Invoice</Label>
-                <p className="text-lg font-semibold" style={{ color: useAccent }}>
-                  {doc.number}
-                </p>
-              </div>
+              <Gate doc={doc} field="invoiceNumber">
+                <div>
+                  <Label className="text-neutral-500">Invoice</Label>
+                  <p className="text-lg font-semibold" style={{ color: useAccent }}>
+                    {doc.number}
+                  </p>
+                </div>
+              </Gate>
             </div>
-            <div className="text-right text-sm text-neutral-600">
-              <p>Issued {formatDate(doc.issueDate)}</p>
-              <p>Due {formatDate(doc.dueDate)}</p>
-            </div>
+            <DateMeta doc={doc} stacked className="text-right text-sm text-neutral-600" issuePrefix="Issued " />
           </div>
           <div className="grid grid-cols-2 gap-6 text-sm">
-            <div>
-              <Label className="text-neutral-400">From</Label>
-              <Party p={doc.business} phone={doc.business.phone} className="mt-1" />
-            </div>
-            <div>
-              <Label className="text-neutral-400">Bill to</Label>
-              <Party p={doc.client} className="mt-1" />
-            </div>
+            <Gate doc={doc} field="from">
+              <div>
+                <Label className="text-neutral-400">From</Label>
+                <Party p={doc.business} phone={doc.business.phone} className="mt-1" />
+              </div>
+            </Gate>
+            <Gate doc={doc} field="billTo">
+              <div>
+                <Label className="text-neutral-400">Bill to</Label>
+                <Party p={doc.client} className="mt-1" />
+              </div>
+            </Gate>
           </div>
           <FancyTable doc={doc} accent={useAccent} mode="soft" />
           <DueCard doc={doc} accent={useAccent} />
@@ -1037,16 +1120,61 @@ const RENDERERS: Record<string, (p: Ctx) => ReactNode> = {
 };
 
 export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
-  const meta = isBuiltinTemplateId(doc.templateId)
-    ? getBuiltinTemplate(doc.templateId)
+  const visibility = resolveVisibility(doc.visibility);
+  const view: InvoiceViewModel = {
+    ...doc,
+    visibility,
+    issueDate: visibility.issueDate ? doc.issueDate : "",
+    dueDate: visibility.dueDate ? doc.dueDate : "",
+    number: visibility.invoiceNumber ? doc.number : "",
+    notes: visibility.notes ? doc.notes : "",
+    paymentInstructions: visibility.payment ? doc.paymentInstructions : "",
+    logoDataUrl: visibility.logo ? doc.logoDataUrl : undefined,
+    business: visibility.from
+      ? {
+          ...doc.business,
+          logoDataUrl: visibility.logo ? doc.business.logoDataUrl : undefined,
+        }
+      : {
+          name: "",
+          email: "",
+          address: "",
+          city: "",
+          postalCode: "",
+          country: "",
+          taxId: "",
+          accentColor: doc.business.accentColor,
+          fontPair: doc.business.fontPair,
+        },
+    client: visibility.billTo
+      ? doc.client
+      : {
+          name: "",
+          email: "",
+          address: "",
+          city: "",
+          postalCode: "",
+          country: "",
+          taxId: "",
+        },
+  };
+
+  const meta = isBuiltinTemplateId(view.templateId)
+    ? getBuiltinTemplate(view.templateId)
     : undefined;
-  const accent = doc.accentColor || meta?.defaultAccent || "#0f766e";
-  const logo = doc.logoDataUrl || doc.business.logoDataUrl;
+  const accent = view.accentColor || meta?.defaultAccent || "#0f766e";
+  const logo = visibility.logo
+    ? view.logoDataUrl || view.business.logoDataUrl
+    : undefined;
 
-  if (doc.customTemplate || doc.templateId.startsWith("custom:")) {
-    return <CanvaCopy doc={doc} accent={accent} logo={logo} />;
-  }
+  const tree =
+    view.customTemplate || view.templateId.startsWith("custom:") ? (
+      <CanvaCopy doc={view} accent={accent} logo={logo} />
+    ) : (
+      <>{(RENDERERS[view.templateId] || Classic)({ doc: view, accent, logo })}</>
+    );
 
-  const Renderer = RENDERERS[doc.templateId] || Classic;
-  return <>{Renderer({ doc, accent, logo })}</>;
+  return (
+    <LogoVisibleCtx.Provider value={visibility.logo}>{tree}</LogoVisibleCtx.Provider>
+  );
 }

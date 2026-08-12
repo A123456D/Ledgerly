@@ -27,6 +27,8 @@ function pdfFilename(doc: InvoiceViewModel) {
 export function defaultSendCopy(doc: InvoiceViewModel, fromName?: string) {
   const who = fromName || doc.business.name || "me";
   const total = formatMoney(doc.totals.total, doc.currency);
+  const showDue =
+    doc.visibility?.dueDate !== false && Boolean(doc.dueDate);
   return {
     to: doc.client.email || "",
     subject: `Invoice ${doc.number || ""} from ${who}`.trim(),
@@ -35,9 +37,9 @@ export function defaultSendCopy(doc: InvoiceViewModel, fromName?: string) {
       "",
       `Please find invoice ${doc.number || ""} attached.`,
       `Amount due: ${total}`,
-      `Due date: ${doc.dueDate || "—"}`,
+      showDue ? `Due date: ${doc.dueDate}` : null,
       "",
-      doc.paymentInstructions
+      doc.visibility?.payment !== false && doc.paymentInstructions
         ? `Payment details:\n${doc.paymentInstructions}`
         : null,
       "",

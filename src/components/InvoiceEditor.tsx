@@ -24,6 +24,11 @@ import { LogoLibrary } from "@/components/LogoUploader";
 import { SendInvoiceModal } from "@/components/SendInvoiceModal";
 import { db, getBusiness, saveBusiness } from "@/lib/db";
 import type { Invoice, LineItem, TaxMode } from "@/lib/types";
+import {
+  INVOICE_VISIBILITY_OPTIONS,
+  resolveVisibility,
+  type InvoiceVisibleField,
+} from "@/lib/invoice-visibility";
 import { InvoicePreview, type InvoiceViewModel } from "@/templates/InvoicePreview";
 import { InvoiceStage } from "@/components/InvoiceStage";
 import { normalizeBusinessLogos } from "@/lib/logos";
@@ -408,20 +413,42 @@ export function InvoiceEditor({ id }: { id: string }) {
 
             <div className="grid gap-3 sm:grid-cols-4">
               <Field label="Issue date">
-                <input
-                  className={inputClass}
-                  type="date"
-                  value={invoice.issueDate}
-                  onChange={(e) => update({ issueDate: e.target.value })}
-                />
+                <div className="flex gap-2">
+                  <input
+                    className={inputClass}
+                    type="date"
+                    value={invoice.issueDate}
+                    onChange={(e) => update({ issueDate: e.target.value })}
+                  />
+                  {invoice.issueDate ? (
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs text-[var(--muted)] underline"
+                      onClick={() => update({ issueDate: "" })}
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
               </Field>
               <Field label="Due date">
-                <input
-                  className={inputClass}
-                  type="date"
-                  value={invoice.dueDate}
-                  onChange={(e) => update({ dueDate: e.target.value })}
-                />
+                <div className="flex gap-2">
+                  <input
+                    className={inputClass}
+                    type="date"
+                    value={invoice.dueDate}
+                    onChange={(e) => update({ dueDate: e.target.value })}
+                  />
+                  {invoice.dueDate ? (
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs text-[var(--muted)] underline"
+                      onClick={() => update({ dueDate: "" })}
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
               </Field>
               <Field label="Currency">
                 <input
@@ -453,6 +480,42 @@ export function InvoiceEditor({ id }: { id: string }) {
                   onChange={(e) => update({ accentColor: e.target.value })}
                 />
               </Field>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm text-[var(--muted)]">Show on invoice</p>
+              <div className="flex flex-wrap gap-2">
+                {INVOICE_VISIBILITY_OPTIONS.map(({ key, label }) => {
+                  const on = resolveVisibility(invoice.visibility)[key];
+                  return (
+                    <label
+                      key={key}
+                      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
+                        on
+                          ? "border-teal-700/30 bg-teal-50 text-teal-900"
+                          : "border-[var(--line)] bg-[var(--wash)] text-[var(--muted)] line-through"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={on}
+                        onChange={() => {
+                          const next = {
+                            ...resolveVisibility(invoice.visibility),
+                            [key]: !on,
+                          } as Record<InvoiceVisibleField, boolean>;
+                          update({ visibility: next });
+                        }}
+                      />
+                      {label}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-xs text-[var(--muted)]">
+                Uncheck to hide a block from the preview and PDF. Empty fields are also hidden.
+              </p>
             </div>
 
             <div>

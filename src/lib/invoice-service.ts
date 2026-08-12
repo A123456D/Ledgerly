@@ -162,6 +162,7 @@ export async function createDraftInvoice(options?: {
   let taxMode = business.taxMode;
   let currency = business.currency;
   let logoId: string | null | undefined = business.defaultLogoId ?? null;
+  let visibility = undefined as Invoice["visibility"];
 
   if (options?.fromInvoiceId) {
     const source = await db.invoices.get(options.fromInvoiceId);
@@ -180,6 +181,7 @@ export async function createDraftInvoice(options?: {
       taxMode = source.taxMode;
       currency = source.currency;
       logoId = source.logoId ?? business.defaultLogoId ?? null;
+      visibility = source.visibility ? { ...source.visibility } : undefined;
     }
   } else if (options?.clientId) {
     const c = await db.clients.get(options.clientId);
@@ -205,6 +207,7 @@ export async function createDraftInvoice(options?: {
     notes,
     paymentInstructions,
     lineItems,
+    visibility,
     totals: {
       subtotal: 0,
       discountTotal: 0,
@@ -258,9 +261,6 @@ export async function issueInvoice(id: string): Promise<Invoice> {
   if (invoice.status !== "draft") {
     throw new Error("Only drafts can be issued");
   }
-  if (!invoice.client.name.trim()) {
-    throw new Error("Add a client name before issuing");
-  }
   if (
     invoice.lineItems.length === 0 ||
     invoice.lineItems.every((l) => !l.description.trim())
@@ -272,7 +272,9 @@ export async function issueInvoice(id: string): Promise<Invoice> {
 
   const business = await getBusiness();
   const settings = await getSettings();
-  const year = new Date(linked.issueDate + "T12:00:00").getFullYear();
+  const year = new Date(
+    (linked.issueDate || todayISO()) + "T12:00:00",
+  ).getFullYear();
   const { number, nextState } = allocateNumber(
     {
       nextSequence: settings.nextSequence,
@@ -304,6 +306,7 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     paymentInstructions: linked.paymentInstructions,
     lineItems: linked.lineItems.map((l) => ({ ...l })),
     totals,
+    visibility: linked.visibility ? { ...linked.visibility } : undefined,
   };
 
   const issued: Invoice = {
@@ -401,6 +404,7 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
       lineItems: invoice.snapshot.lineItems,
       totals: invoice.snapshot.totals,
       status: invoice.status,
+      visibility: invoice.snapshot.visibility ?? invoice.visibility,
       customTemplate: customFromSnapshot(invoice.snapshot),
     };
   }
@@ -427,6 +431,7 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
     lineItems: invoice.lineItems,
     totals: invoice.totals,
     status: invoice.status,
+    visibility: invoice.visibility,
   };
 }
 
@@ -469,6 +474,7 @@ export async function displayDocumentLive(
     lineItems: invoice.lineItems,
     totals: recomputeTotals(invoice),
     status: invoice.status,
+    visibility: invoice.visibility,
     customTemplate,
   };
 }

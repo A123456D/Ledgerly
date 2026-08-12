@@ -1,6 +1,10 @@
+import type { InvoiceVisibility } from "@/lib/invoice-visibility";
+
 export type InvoiceStatus = "draft" | "issued" | "paid" | "void";
 export type TaxMode = "exclusive" | "inclusive";
 export type FontPair = "editorial" | "modern" | "mono";
+
+export type { InvoiceVisibility };
 
 /** Built-in template ids + `custom:{id}` for Canva/uploaded designs. */
 export type BuiltinTemplateId =
@@ -147,6 +151,8 @@ export interface IssuedSnapshot {
   paymentInstructions: string;
   lineItems: LineItem[];
   totals: InvoiceTotals;
+  /** Frozen print visibility at issue time */
+  visibility?: InvoiceVisibility;
 }
 
 export interface Invoice {
@@ -167,6 +173,8 @@ export interface Invoice {
   paymentInstructions: string;
   lineItems: LineItem[];
   totals: InvoiceTotals;
+  /** Toggle which blocks appear on preview / PDF */
+  visibility?: InvoiceVisibility;
   snapshot?: IssuedSnapshot;
   lastSentAt?: string;
   lastSentTo?: string;
