@@ -138,16 +138,16 @@ export function Field({
   children,
   hint,
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
   hint?: string;
 }) {
   return (
-    <label className="block text-sm">
-      <span className="mb-1 block text-[var(--muted)]">{label}</span>
+    <div className="block text-sm">
+      <div className="mb-1 text-[var(--muted)]">{label}</div>
       {children}
       {hint ? <span className="mt-1 block text-xs text-[var(--muted)]">{hint}</span> : null}
-    </label>
+    </div>
   );
 }
 

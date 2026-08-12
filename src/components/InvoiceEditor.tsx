@@ -76,6 +76,32 @@ export function InvoiceEditor({ id }: { id: string }) {
   }
 
   const locked = invoice.status !== "draft";
+  const vis = resolveVisibility(invoice.visibility);
+
+  function toggleFieldVisibility(key: InvoiceVisibleField) {
+    update({
+      visibility: {
+        ...resolveVisibility(invoice!.visibility),
+        [key]: !resolveVisibility(invoice!.visibility)[key],
+      },
+    });
+  }
+
+  function fieldShowCheckbox(key: InvoiceVisibleField) {
+    const on = vis[key];
+    return (
+      <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-normal text-[var(--muted)]">
+        <input
+          type="checkbox"
+          className="h-4 w-4 shrink-0 rounded border-[var(--line)] accent-[var(--accent)]"
+          checked={on}
+          disabled={locked}
+          onChange={() => toggleFieldVisibility(key)}
+        />
+        Show
+      </label>
+    );
+  }
 
   function update(patch: Partial<Invoice>) {
     if (locked) return;
@@ -412,7 +438,14 @@ export function InvoiceEditor({ id }: { id: string }) {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-4">
-              <Field label="Issue date">
+              <Field
+                label={
+                  <span className="flex items-center justify-between gap-2">
+                    Issue date
+                    {fieldShowCheckbox("issueDate")}
+                  </span>
+                }
+              >
                 <div className="flex gap-2">
                   <input
                     className={inputClass}
@@ -431,7 +464,14 @@ export function InvoiceEditor({ id }: { id: string }) {
                   ) : null}
                 </div>
               </Field>
-              <Field label="Due date">
+              <Field
+                label={
+                  <span className="flex items-center justify-between gap-2">
+                    Due date
+                    {fieldShowCheckbox("dueDate")}
+                  </span>
+                }
+              >
                 <div className="flex gap-2">
                   <input
                     className={inputClass}
@@ -482,39 +522,35 @@ export function InvoiceEditor({ id }: { id: string }) {
               </Field>
             </div>
 
-            <div>
-              <p className="mb-2 text-sm text-[var(--muted)]">Show on invoice</p>
-              <div className="flex flex-wrap gap-2">
+            <div className="rounded-lg border border-[var(--line)] bg-[var(--wash)]/50 p-3 sm:p-4">
+              <p className="mb-3 text-sm font-medium text-[var(--ink)]">
+                Show on invoice
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {INVOICE_VISIBILITY_OPTIONS.map(({ key, label }) => {
-                  const on = resolveVisibility(invoice.visibility)[key];
+                  const on = vis[key];
                   return (
                     <label
                       key={key}
-                      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
+                      className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm ${
                         on
-                          ? "border-teal-700/30 bg-teal-50 text-teal-900"
-                          : "border-[var(--line)] bg-[var(--wash)] text-[var(--muted)] line-through"
+                          ? "border-teal-700/25 bg-[var(--panel)]"
+                          : "border-[var(--line)] bg-[var(--panel)]/60 opacity-70"
                       }`}
                     >
                       <input
                         type="checkbox"
-                        className="sr-only"
+                        className="h-4 w-4 shrink-0 rounded border-[var(--line)] accent-[var(--accent)]"
                         checked={on}
-                        onChange={() => {
-                          const next = {
-                            ...resolveVisibility(invoice.visibility),
-                            [key]: !on,
-                          } as Record<InvoiceVisibleField, boolean>;
-                          update({ visibility: next });
-                        }}
+                        onChange={() => toggleFieldVisibility(key)}
                       />
-                      {label}
+                      <span className={on ? "" : "line-through"}>{label}</span>
                     </label>
                   );
                 })}
               </div>
-              <p className="mt-1.5 text-xs text-[var(--muted)]">
-                Uncheck to hide a block from the preview and PDF. Empty fields are also hidden.
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Uncheck any box to hide that block from the preview and PDF.
               </p>
             </div>
 
