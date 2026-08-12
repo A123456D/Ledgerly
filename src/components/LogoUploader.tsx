@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { fileToDataUrl } from "@/lib/image";
+import { fileToDataUrl, removeImageBackground } from "@/lib/image";
 import {
   addBusinessLogo,
   normalizeBusinessLogos,
   removeBusinessLogo,
   renameBusinessLogo,
+  replaceBusinessLogoDataUrl,
   setDefaultBusinessLogo,
 } from "@/lib/logos";
 import type { Business } from "@/lib/types";
@@ -31,6 +32,8 @@ export function LogoLibrary({
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [tolerance, setTolerance] = useState(42);
   const normalized = normalizeBusinessLogos(business);
   const logos = normalized.logos ?? [];
 
@@ -46,6 +49,7 @@ export function LogoLibrary({
             maxEdge: 800,
             quality: 0.9,
             maxBytes: 900_000,
+            preferPng: true,
           });
           const name = file.name.replace(/\.[^.]+$/, "");
           next = addBusinessLogo(next, dataUrl, name);
@@ -60,6 +64,24 @@ export function LogoLibrary({
     },
     [business, onChange, onSelectLogo],
   );
+
+  async function onRemoveBackground(logoId: string) {
+    const logo = logos.find((l) => l.id === logoId);
+    if (!logo) return;
+    setBusyId(logoId);
+    setError("");
+    try {
+      const cleaned = await removeImageBackground(logo.dataUrl, {
+        tolerance,
+        maxEdge: 1000,
+      });
+      onChange(replaceBusinessLogoDataUrl(business, logoId, cleaned));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Background remove failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div>
@@ -92,7 +114,7 @@ export function LogoLibrary({
               return (
                 <div
                   key={logo.id}
-                  className={`flex gap-3 rounded-lg border bg-white p-2 ${
+                  className={`flex gap-3 rounded-lg border bg-[repeating-conic-gradient(#e7e5e4_0%_25%,#fff_0%_50%)_0_0/12px_12px] p-2 ${
                     isSelected
                       ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/20"
                       : "border-[var(--line)]"
@@ -108,7 +130,7 @@ export function LogoLibrary({
                     <img
                       src={logo.dataUrl}
                       alt={logo.name}
-                      className="h-14 w-14 rounded-md border border-[var(--line)] object-contain p-1"
+                      className="h-14 w-14 rounded-md border border-[var(--line)] bg-white/80 object-contain p-1"
                     />
                   </button>
                   <div className="min-w-0 flex-1 space-y-1">
@@ -144,6 +166,15 @@ export function LogoLibrary({
                       </Button>
                       <Button
                         type="button"
+                        variant="secondary"
+                        className="px-2 py-1 text-xs"
+                        disabled={busyId === logo.id}
+                        onClick={() => void onRemoveBackground(logo.id)}
+                      >
+                        {busyId === logo.id ? "Removing…" : "Remove BG"}
+                      </Button>
+                      <Button
+                        type="button"
                         variant="ghost"
                         className="px-2 py-1 text-xs text-red-700"
                         onClick={() => {
@@ -166,6 +197,27 @@ export function LogoLibrary({
           <p className="mb-3 text-sm text-[var(--muted)]">No logos yet.</p>
         )}
 
+        {logos.length > 0 ? (
+          <div className="mb-3 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2">
+            <label className="flex items-center justify-between gap-3 text-xs text-[var(--muted)]">
+              <span>BG remove strength</span>
+              <span className="tabular-nums text-[var(--ink)]">{tolerance}</span>
+            </label>
+            <input
+              type="range"
+              min={15}
+              max={90}
+              value={tolerance}
+              onChange={(e) => setTolerance(Number(e.target.value))}
+              className="mt-1 w-full accent-[var(--accent)]"
+            />
+            <p className="mt-1 text-[11px] text-[var(--muted)]">
+              Offline — clears solid white/colored backdrops. Raise strength if
+              more background remains.
+            </p>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -184,7 +236,7 @@ export function LogoLibrary({
             </Button>
           ) : null}
           <p className="text-xs text-[var(--muted)]">
-            Drop multiple PNG/JPG files — transparent PNGs work best.
+            Drop PNG/JPG — then use Remove BG for white/solid backgrounds.
           </p>
         </div>
         {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}

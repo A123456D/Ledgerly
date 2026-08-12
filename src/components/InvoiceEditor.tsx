@@ -608,7 +608,8 @@ export function InvoiceEditor({ id }: { id: string }) {
                 onAccentSuggest={(accent) => update({ accentColor: accent })}
               />
               <p className="mt-2 text-xs text-[var(--muted)]">
-                Pick a built-in style, or upload a Canva header banner. Manage designs under{" "}
+                Pick a built-in style. Upload logos below — use Remove BG if needed. Manage
+                defaults under{" "}
                 <Link href="/templates" className="underline">
                   Templates
                 </Link>

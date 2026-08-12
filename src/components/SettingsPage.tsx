@@ -222,7 +222,7 @@ export function SettingsPage() {
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-sm text-[var(--muted)]">Default template</p>
               <Link href="/templates" className="text-xs text-teal-800 underline">
-                Canva import & gallery →
+                Template gallery →
               </Link>
             </div>
             <TemplatePicker

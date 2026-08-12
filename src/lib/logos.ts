@@ -107,3 +107,17 @@ export function setDefaultBusinessLogo(
     defaultLogoId: logoId,
   });
 }
+
+export function replaceBusinessLogoDataUrl(
+  business: Business,
+  logoId: string,
+  dataUrl: string,
+): Business {
+  const normalized = normalizeBusinessLogos(business);
+  return normalizeBusinessLogos({
+    ...normalized,
+    logos: (normalized.logos ?? []).map((l) =>
+      l.id === logoId ? { ...l, dataUrl } : l,
+    ),
+  });
+}
