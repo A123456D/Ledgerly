@@ -2,7 +2,7 @@
 
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { toPng } from "html-to-image";
+import { domToPng } from "modern-screenshot";
 import { jsPDF } from "jspdf";
 import {
   InvoicePreview,
@@ -11,7 +11,6 @@ import {
 
 const A4_W_MM = 210;
 const A4_H_MM = 297;
-/** CSS px at 96dpi — keeps mm-based templates stable off-screen */
 const PX_PER_MM = 96 / 25.4;
 const A4_W_PX = Math.round(A4_W_MM * PX_PER_MM);
 const A4_H_PX = Math.round(A4_H_MM * PX_PER_MM);
@@ -34,69 +33,6 @@ async function waitForImages(root: HTMLElement) {
         }),
     ),
   );
-}
-
-/** Flatten modern CSS colors so html-to-image / SVG foreignObject can paint them. */
-function flattenComputedColors(source: HTMLElement, clone: HTMLElement) {
-  const srcNodes = [source, ...Array.from(source.querySelectorAll<HTMLElement>("*"))];
-  const cloneNodes = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))];
-  const n = Math.min(srcNodes.length, cloneNodes.length);
-  for (let i = 0; i < n; i++) {
-    const s = srcNodes[i];
-    const c = cloneNodes[i];
-    if (!s || !c) continue;
-    const cs = getComputedStyle(s);
-    c.style.color = cs.color;
-    c.style.backgroundColor = cs.backgroundColor;
-    c.style.borderColor = cs.borderColor;
-    c.style.borderTopColor = cs.borderTopColor;
-    c.style.borderRightColor = cs.borderRightColor;
-    c.style.borderBottomColor = cs.borderBottomColor;
-    c.style.borderLeftColor = cs.borderLeftColor;
-    c.style.outlineColor = cs.outlineColor;
-    c.style.boxShadow = "none";
-    c.style.textShadow = cs.textShadow === "none" ? "none" : cs.textShadow;
-    c.style.opacity = cs.opacity;
-    c.style.fontFamily = cs.fontFamily;
-    c.style.fontSize = cs.fontSize;
-    c.style.fontWeight = cs.fontWeight;
-    c.style.letterSpacing = cs.letterSpacing;
-    c.style.lineHeight = cs.lineHeight;
-    c.style.textAlign = cs.textAlign;
-  }
-}
-
-async function elementToPng(node: HTMLElement): Promise<string> {
-  const width = Math.max(node.scrollWidth, node.offsetWidth, A4_W_PX);
-  const height = Math.max(node.scrollHeight, node.offsetHeight, A4_H_PX);
-
-  // Bake computed colors onto the node so Tailwind/oklch paint correctly in the export.
-  flattenComputedColors(node, node);
-  node.style.boxShadow = "none";
-  node.style.transform = "none";
-  node.style.width = `${width}px`;
-  node.style.maxWidth = `${width}px`;
-  node.style.minHeight = `${A4_H_PX}px`;
-
-  return toPng(node, {
-    pixelRatio: 2,
-    cacheBust: true,
-    width,
-    height,
-    canvasWidth: width * 2,
-    canvasHeight: height * 2,
-    backgroundColor: "#ffffff",
-    style: {
-      transform: "none",
-      left: "0",
-      top: "0",
-      margin: "0",
-    },
-    filter: (el) => {
-      if (!(el instanceof HTMLElement)) return true;
-      return !el.classList.contains("no-print");
-    },
-  });
 }
 
 function pngToPdfBlob(dataUrl: string): Blob {
@@ -127,30 +63,98 @@ function pngToPdfBlob(dataUrl: string): Blob {
   return pdf.output("blob");
 }
 
-/** Render the same HTML template the editor shows and export it as PDF. */
-export async function buildInvoicePdfBlobFromPreview(
-  doc: InvoiceViewModel,
-): Promise<Blob> {
+async function captureNode(node: HTMLElement): Promise<string> {
+  const width = Math.max(node.scrollWidth, node.offsetWidth, A4_W_PX);
+  const height = Math.max(node.scrollHeight, node.offsetHeight, A4_H_PX);
+
+  return domToPng(node, {
+    width,
+    height,
+    scale: 2,
+    backgroundColor: "#ffffff",
+    style: {
+      transform: "none",
+      boxShadow: "none",
+    },
+    filter: (el) => {
+      if (!(el instanceof Element)) return true;
+      return !el.classList?.contains("no-print");
+    },
+  });
+}
+
+/**
+ * Clone the live editor preview (exact DOM you see) into a 1:1 A4 host and
+ * screenshot it — this is what makes PDF/WhatsApp match the template.
+ */
+async function captureLivePreviewSheet(): Promise<Blob | null> {
+  const live = document.querySelector<HTMLElement>(
+    "[data-invoice-preview-root] [data-invoice-sheet]",
+  );
+  if (!live) return null;
+
   const host = document.createElement("div");
   host.setAttribute("aria-hidden", "true");
-  host.setAttribute("data-invoice-pdf-host", "true");
-  // Keep in-viewport (opacity 0) so fonts/layout match real CSS; off-screen can skew mm units.
   host.style.cssText = [
     "position:fixed",
-    "left:0",
-    "top:0",
-    "width:" + A4_W_PX + "px",
-    "z-index:-1",
+    "inset:0",
+    "z-index:2147483646",
+    "display:flex",
+    "align-items:flex-start",
+    "justify-content:center",
+    "background:#fff",
+    "overflow:auto",
     "opacity:0",
     "pointer-events:none",
-    "overflow:hidden",
-    "background:#fff",
   ].join(";");
+
+  const frame = document.createElement("div");
+  frame.style.cssText = `width:${A4_W_PX}px;min-height:${A4_H_PX}px;background:#fff;`;
+  host.appendChild(frame);
   document.body.appendChild(host);
+
+  try {
+    const clone = live.cloneNode(true) as HTMLElement;
+    clone.style.boxShadow = "none";
+    clone.style.transform = "none";
+    clone.style.width = `${A4_W_PX}px`;
+    clone.style.maxWidth = `${A4_W_PX}px`;
+    clone.style.minHeight = `${A4_H_PX}px`;
+    clone.style.margin = "0";
+    frame.appendChild(clone);
+
+    await waitForImages(clone);
+    await document.fonts?.ready;
+    await sleep(80);
+
+    const dataUrl = await captureNode(clone);
+    return pngToPdfBlob(dataUrl);
+  } finally {
+    host.remove();
+  }
+}
+
+/** Remount template off-screen when the live preview isn’t on the page. */
+async function captureRemountedPreview(doc: InvoiceViewModel): Promise<Blob> {
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  host.style.cssText = [
+    "position:fixed",
+    "inset:0",
+    "z-index:2147483646",
+    "display:flex",
+    "align-items:flex-start",
+    "justify-content:center",
+    "background:#fff",
+    "overflow:auto",
+    "opacity:0",
+    "pointer-events:none",
+  ].join(";");
 
   const mount = document.createElement("div");
   mount.style.cssText = `width:${A4_W_PX}px;background:#fff;`;
   host.appendChild(mount);
+  document.body.appendChild(host);
 
   const root = createRoot(mount);
 
@@ -161,26 +165,36 @@ export async function buildInvoicePdfBlobFromPreview(
 
     await document.fonts?.ready;
     await waitForImages(mount);
-    // Let layout + images settle (esp. mobile / WhatsApp share path)
     await sleep(120);
-    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
     const sheet =
       mount.querySelector<HTMLElement>("[data-invoice-sheet], .invoice-sheet") ||
-      mount.firstElementChild;
-    if (!(sheet instanceof HTMLElement)) {
-      throw new Error("Invoice preview failed to render for PDF");
-    }
+      (mount.firstElementChild as HTMLElement | null);
+
+    if (!sheet) throw new Error("Invoice preview failed to render for PDF");
 
     sheet.style.boxShadow = "none";
     sheet.style.width = `${A4_W_PX}px`;
     sheet.style.maxWidth = `${A4_W_PX}px`;
     sheet.style.minHeight = `${A4_H_PX}px`;
 
-    const dataUrl = await elementToPng(sheet);
+    const dataUrl = await captureNode(sheet);
     return pngToPdfBlob(dataUrl);
   } finally {
     root.unmount();
     host.remove();
   }
+}
+
+/** Build a PDF that matches the on-screen template as closely as possible. */
+export async function buildInvoicePdfBlobFromPreview(
+  doc: InvoiceViewModel,
+): Promise<Blob> {
+  try {
+    const live = await captureLivePreviewSheet();
+    if (live) return live;
+  } catch {
+    // fall through to remount
+  }
+  return captureRemountedPreview(doc);
 }

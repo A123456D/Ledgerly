@@ -181,11 +181,18 @@ export function InvoiceEditor({ id }: { id: string }) {
     if (!preview || !invoice) return;
     const current = invoice;
     setBusy(true);
+    setError("");
     try {
       if (current.status === "draft") await saveInvoice(current);
       const latest = (await db.invoices.get(current.id)) || current;
       const doc = await displayDocumentLive(latest);
+      // Ensure the live preview is painted before we snapshot it
+      document
+        .querySelector("[data-invoice-preview-root]")
+        ?.scrollIntoView({ block: "nearest" });
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
       await downloadInvoicePdf(doc);
+      setMessage("PDF saved — same layout as the live preview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "PDF failed");
     } finally {
@@ -794,7 +801,10 @@ export function InvoiceEditor({ id }: { id: string }) {
           <p className="mb-2 text-xs uppercase tracking-wider text-[var(--muted)]">
             Live A4 preview
           </p>
-          <div className="min-w-0 max-h-[70vh] overflow-x-auto overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 sm:max-h-none sm:p-5">
+          <div
+            data-invoice-preview-root="true"
+            className="min-w-0 max-h-[70vh] overflow-x-auto overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 sm:max-h-none sm:p-5"
+          >
             <InvoiceStage maxScale={1} minScale={0.28}>
               {preview ? <InvoicePreview doc={preview} /> : null}
             </InvoiceStage>

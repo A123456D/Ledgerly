@@ -64,6 +64,7 @@ export function InvoiceStage({
       >
         <div
           ref={sheetRef}
+          data-invoice-stage-scaler="true"
           className="absolute left-0 top-0 origin-top-left"
           style={{
             width: `${A4_WIDTH_MM}mm`,
