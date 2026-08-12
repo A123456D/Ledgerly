@@ -181,6 +181,10 @@ export function SendInvoiceModal({
           <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">
             Or email
           </p>
+          <p className="text-xs text-[var(--muted)]">
+            Opens your mail app with this message. The PDF downloads separately —
+            attach it before you send (browsers can’t auto-attach via email).
+          </p>
           <Field label="To">
             <input
               className={inputClass}
@@ -215,7 +219,7 @@ export function SendInvoiceModal({
 
         <div className="mt-5 flex flex-wrap gap-2">
           <Button type="submit" disabled={busy}>
-            {busy ? "Preparing…" : "Send with PDF"}
+            {busy ? "Preparing…" : "Open email + PDF"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
             Cancel

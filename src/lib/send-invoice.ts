@@ -57,9 +57,44 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
+function openMailtoWithPdfHint(
+  to: string,
+  subject: string,
+  message: string,
+  filename: string,
+) {
+  const mailto = `mailto:${encodeURIComponent(to.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(
+    `${message}\n\n(The PDF “${filename}” was downloaded — attach it before sending.)`,
+  )}`;
+  window.location.href = mailto;
+}
+
+function mailtoFallback(
+  blob: Blob,
+  filename: string,
+  to: string,
+  subject: string,
+  message: string,
+): SendInvoiceResult {
+  downloadPdfBlob(blob, filename);
+  openMailtoWithPdfHint(to, subject, message, filename);
+  return {
+    method: "mailto",
+    detail: `PDF downloaded and your email app opened. Attach “${filename}” before sending.`,
+  };
+}
+
+/** Static Skitz embed has no /api — skip the dead POST that returns 405. */
+function isStaticHostWithoutEmailApi() {
+  return Boolean(process.env.NEXT_PUBLIC_BASE_PATH);
+}
+
 /**
  * Email send path — does NOT call navigator.share after PDF build
  * (share must stay on a direct user tap; see Send modal WhatsApp flow).
+ *
+ * On Skitz / static hosts there is no Resend API, so we download the PDF and
+ * open the device mail app (mailto cannot attach files).
  */
 export async function sendInvoice(
   input: SendInvoiceInput,
@@ -71,6 +106,10 @@ export async function sendInvoice(
 
   const blob = await buildInvoicePdfBlob(doc);
   const filename = pdfFilenameFor(doc);
+
+  if (isStaticHostWithoutEmailApi()) {
+    return mailtoFallback(blob, filename, to, subject, message);
+  }
 
   const pdfBase64 = await blobToBase64(blob);
   let res: Response;
@@ -90,11 +129,7 @@ export async function sendInvoice(
       }),
     });
   } catch {
-    downloadPdfBlob(blob, filename);
-    return {
-      method: "download",
-      detail: `PDF downloaded (“${filename}”). Attach it in your email or WhatsApp.`,
-    };
+    return mailtoFallback(blob, filename, to, subject, message);
   }
 
   if (res.ok) {
@@ -104,17 +139,14 @@ export async function sendInvoice(
     };
   }
 
-  // Static / Skitz host has no email API — download + open mail app
-  if (res.status === 503 || res.status === 404) {
-    downloadPdfBlob(blob, filename);
-    const mailto = `mailto:${encodeURIComponent(to.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(
-      `${message}\n\n(The PDF “${filename}” was downloaded — attach it before sending.)`,
-    )}`;
-    window.location.href = mailto;
-    return {
-      method: "mailto",
-      detail: `PDF downloaded and your email app opened. Attach “${filename}” before sending.`,
-    };
+  // No API / not configured (Cloudflare static often returns 405 on POST)
+  if (
+    res.status === 503 ||
+    res.status === 404 ||
+    res.status === 405 ||
+    res.status === 501
+  ) {
+    return mailtoFallback(blob, filename, to, subject, message);
   }
 
   const err = (await res.json().catch(() => null)) as { error?: string } | null;
