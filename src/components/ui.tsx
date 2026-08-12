@@ -154,6 +154,49 @@ export function Field({
 export const inputClass =
   "w-full rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--ink)] outline-none ring-[var(--accent)] placeholder:text-neutral-400 focus:ring-2";
 
+/** Text input for money/qty — no spinners, allows typing decimals naturally. */
+export function DecimalInput({
+  value,
+  onChange,
+  className = inputClass,
+  placeholder = "0",
+  align = "left",
+  disabled,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  className?: string;
+  placeholder?: string;
+  align?: "left" | "right";
+  disabled?: boolean;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display =
+    draft !== null ? draft : value === 0 ? "" : String(value);
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      disabled={disabled}
+      className={`${className} ${align === "right" ? "text-right tabular-nums" : ""}`}
+      placeholder={placeholder}
+      value={display}
+      onChange={(e) => {
+        const v = e.target.value.replace(",", ".");
+        if (v !== "" && !/^\d*\.?\d*$/.test(v)) return;
+        setDraft(v);
+        if (v === "" || v === ".") onChange(0);
+        else {
+          const n = parseFloat(v);
+          if (!Number.isNaN(n)) onChange(n);
+        }
+      }}
+      onBlur={() => setDraft(null)}
+    />
+  );
+}
+
 export function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
     draft: "bg-amber-100 text-amber-900",

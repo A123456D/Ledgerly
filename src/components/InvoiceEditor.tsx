@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Button, Field, StatusPill, inputClass } from "@/components/ui";
+import { Button, DecimalInput, Field, StatusPill, inputClass } from "@/components/ui";
 import { formatDate, formatMoney, uid } from "@/lib/format";
 import {
   clientToParty,
@@ -605,13 +605,13 @@ export function InvoiceEditor({ id }: { id: string }) {
               />
             ) : null}
 
-            <div>
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-[var(--muted)]">Line items</p>
+            <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2.5 sm:px-4">
+                <p className="text-sm font-medium text-[var(--ink)]">Line items</p>
                 <div className="flex flex-wrap gap-2">
                   {catalog && catalog.length > 0 ? (
                     <select
-                      className={inputClass + " w-auto"}
+                      className={inputClass + " w-auto min-w-[10rem]"}
                       defaultValue=""
                       onChange={(e) => {
                         if (e.target.value) {
@@ -633,109 +633,136 @@ export function InvoiceEditor({ id }: { id: string }) {
                   </Button>
                 </div>
               </div>
-              <div className="space-y-2">
-                {invoice.lineItems.map((line, index) => (
-                  <div
-                    key={line.id}
-                    className="grid grid-cols-2 gap-2 rounded-lg border border-[var(--line)] bg-[var(--wash)]/40 p-2 sm:grid-cols-12"
-                  >
-                    <input
-                      className={`${inputClass} col-span-2 sm:col-span-5`}
-                      placeholder="Description"
-                      value={line.description}
-                      onChange={(e) =>
-                        updateLine(line.id, { description: e.target.value })
-                      }
-                      onKeyDown={(e) => {
-                        if (
-                          e.key === "Enter" &&
-                          index === invoice.lineItems.length - 1 &&
-                          line.description.trim()
-                        ) {
-                          e.preventDefault();
-                          addLine();
-                        }
-                      }}
-                    />
-                    <input
-                      className={`${inputClass} sm:col-span-1`}
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      title="Qty"
-                      placeholder="Qty"
-                      value={line.quantity}
-                      onChange={(e) =>
-                        updateLine(line.id, {
-                          quantity: Number(e.target.value),
-                        })
-                      }
-                    />
-                    <input
-                      className={`${inputClass} sm:col-span-2`}
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      title="Unit price"
-                      placeholder="Rate"
-                      value={line.unitPrice}
-                      onChange={(e) =>
-                        updateLine(line.id, {
-                          unitPrice: Number(e.target.value),
-                        })
-                      }
-                    />
-                    <input
-                      className={`${inputClass} sm:col-span-1`}
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      title="VAT %"
-                      placeholder="VAT %"
-                      value={line.taxRate}
-                      onChange={(e) =>
-                        updateLine(line.id, {
-                          taxRate: Number(e.target.value),
-                        })
-                      }
-                    />
-                    <input
-                      className={`${inputClass} sm:col-span-1`}
-                      type="number"
-                      min={0}
-                      max={100}
-                      title="Discount %"
-                      placeholder="Disc %"
-                      value={line.discountPercent}
-                      onChange={(e) =>
-                        updateLine(line.id, {
-                          discountPercent: Number(e.target.value),
-                        })
-                      }
-                    />
-                    <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-2 sm:justify-end">
-                      <span className="text-xs tabular-nums text-[var(--muted)]">
-                        {formatMoney(
-                          line.quantity *
-                            line.unitPrice *
-                            (1 - (line.discountPercent || 0) / 100),
-                          invoice.currency,
-                        )}
-                      </span>
-                      <button
-                        type="button"
-                        className="shrink-0 text-xs text-red-700"
-                        onClick={() => removeLine(line.id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
+
+              <div className="hidden border-b border-[var(--line)] bg-[var(--wash)]/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted)] sm:grid sm:grid-cols-[minmax(0,1fr)_4.25rem_5.5rem_3.75rem_3.75rem_5.5rem_3.25rem] sm:gap-2">
+                <span>Description</span>
+                <span className="text-right">Qty</span>
+                <span className="text-right">Rate</span>
+                <span className="text-right">VAT %</span>
+                <span className="text-right">Disc %</span>
+                <span className="text-right">Amount</span>
+                <span />
               </div>
-              <p className="mt-2 text-right text-sm font-medium tabular-nums">
-                Total {formatMoney(invoice.totals.total, invoice.currency)}
-              </p>
+
+              <div className="divide-y divide-[var(--line)]">
+                {invoice.lineItems.map((line, index) => {
+                  const lineAmount =
+                    line.quantity *
+                    line.unitPrice *
+                    (1 - (line.discountPercent || 0) / 100);
+                  return (
+                    <div
+                      key={line.id}
+                      className="p-3 sm:grid sm:grid-cols-[minmax(0,1fr)_4.25rem_5.5rem_3.75rem_3.75rem_5.5rem_3.25rem] sm:items-start sm:gap-2 sm:px-4 sm:py-3"
+                    >
+                      <div className="min-w-0 sm:pt-1">
+                        <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                          Description
+                        </label>
+                        <input
+                          className={inputClass}
+                          placeholder="What are you billing for?"
+                          value={line.description}
+                          onChange={(e) =>
+                            updateLine(line.id, { description: e.target.value })
+                          }
+                          onKeyDown={(e) => {
+                            if (
+                              e.key === "Enter" &&
+                              index === invoice.lineItems.length - 1 &&
+                              line.description.trim()
+                            ) {
+                              e.preventDefault();
+                              addLine();
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-0 sm:contents">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                            Qty
+                          </label>
+                          <DecimalInput
+                            value={line.quantity}
+                            placeholder="1"
+                            align="right"
+                            onChange={(quantity) =>
+                              updateLine(line.id, { quantity })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                            Rate ({invoice.currency})
+                          </label>
+                          <DecimalInput
+                            value={line.unitPrice}
+                            placeholder="0.00"
+                            align="right"
+                            onChange={(unitPrice) =>
+                              updateLine(line.id, { unitPrice })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                            VAT %
+                          </label>
+                          <DecimalInput
+                            value={line.taxRate}
+                            placeholder="15"
+                            align="right"
+                            onChange={(taxRate) =>
+                              updateLine(line.id, { taxRate })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                            Disc %
+                          </label>
+                          <DecimalInput
+                            value={line.discountPercent}
+                            placeholder="0"
+                            align="right"
+                            onChange={(discountPercent) =>
+                              updateLine(line.id, { discountPercent })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-2 sm:mt-0 sm:flex-col sm:items-end sm:justify-start sm:pt-2">
+                        <label className="text-xs font-medium text-[var(--muted)] sm:sr-only">
+                          Amount
+                        </label>
+                        <span className="text-sm font-medium tabular-nums">
+                          {formatMoney(lineAmount, invoice.currency)}
+                        </span>
+                      </div>
+
+                      <div className="mt-1 flex justify-end sm:mt-0 sm:justify-center sm:pt-2">
+                        <button
+                          type="button"
+                          className="text-xs text-red-700 underline-offset-2 hover:underline disabled:opacity-40"
+                          disabled={invoice.lineItems.length <= 1}
+                          onClick={() => removeLine(line.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t border-[var(--line)] bg-[var(--wash)]/40 px-3 py-3 text-right sm:px-4">
+                <p className="text-sm font-semibold tabular-nums">
+                  Total {formatMoney(invoice.totals.total, invoice.currency)}
+                </p>
+              </div>
             </div>
 
             <Field label="Notes">
