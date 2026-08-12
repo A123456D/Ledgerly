@@ -2,16 +2,13 @@
 
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { buildInvoicePdfBlobFromPreview } from "@/lib/pdf/capture";
-import { buildInvoicePdfBlobLegacy } from "@/lib/pdf/legacy";
 
 export async function buildInvoicePdfBlob(
   doc: InvoiceViewModel,
 ): Promise<Blob> {
-  try {
-    return await buildInvoicePdfBlobFromPreview(doc);
-  } catch {
-    return buildInvoicePdfBlobLegacy(doc);
-  }
+  // Always use the live HTML template capture so WhatsApp / PDF match the editor.
+  // (Legacy react-pdf path looked different and is no longer used for send/download.)
+  return buildInvoicePdfBlobFromPreview(doc);
 }
 
 export async function downloadInvoicePdf(
@@ -25,4 +22,31 @@ export async function downloadInvoicePdf(
   a.download = filename || `${doc.number || "invoice"}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** Share the WYSIWYG PDF via the system sheet (WhatsApp, Mail, etc.). */
+export async function shareInvoicePdf(
+  doc: InvoiceViewModel,
+  opts?: { title?: string; text?: string },
+): Promise<"shared" | "downloaded"> {
+  const blob = await buildInvoicePdfBlob(doc);
+  const filename = `${(doc.number || "invoice").replace(/[^\w.-]+/g, "_")}.pdf`;
+  const file = new File([blob], filename, { type: "application/pdf" });
+
+  const canShareFiles =
+    typeof navigator !== "undefined" &&
+    typeof navigator.canShare === "function" &&
+    navigator.canShare({ files: [file] });
+
+  if (canShareFiles && typeof navigator.share === "function") {
+    await navigator.share({
+      title: opts?.title || `Invoice ${doc.number || ""}`.trim(),
+      text: opts?.text,
+      files: [file],
+    });
+    return "shared";
+  }
+
+  await downloadInvoicePdf(doc, filename);
+  return "downloaded";
 }

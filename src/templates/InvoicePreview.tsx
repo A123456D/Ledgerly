@@ -396,19 +396,20 @@ function Notes({
   const notes = show(doc, "notes") ? doc.notes : "";
   const payment = show(doc, "payment") ? doc.paymentInstructions : "";
   if (!notes && !payment) return null;
+  // Keep banking / notes fully readable on PDF & WhatsApp (no heavy fade)
   return (
     <div
-      className={`mt-10 grid gap-6 border-t pt-7 text-[13px] sm:grid-cols-2 ${light ? "border-white/15 text-white/80" : "border-black/10 opacity-80"}`}
+      className={`mt-10 grid gap-6 border-t pt-7 text-[13px] sm:grid-cols-2 ${light ? "border-white/15 text-white/90" : "border-black/10 text-[#1c1917]"}`}
     >
       {notes ? (
         <div>
-          <Label className={light ? "text-white/50" : "opacity-45"}>Notes</Label>
+          <Label className={light ? "text-white/60" : "text-neutral-500"}>Notes</Label>
           <p className="mt-2 whitespace-pre-wrap leading-relaxed">{notes}</p>
         </div>
       ) : null}
       {payment ? (
         <div>
-          <Label className={light ? "text-white/50" : "opacity-45"}>Payment</Label>
+          <Label className={light ? "text-white/60" : "text-neutral-500"}>Payment</Label>
           <p className="mt-2 whitespace-pre-wrap leading-relaxed">{payment}</p>
         </div>
       ) : null}
@@ -429,6 +430,7 @@ function Sheet({
 }) {
   return (
     <article
+      data-invoice-sheet="true"
       className={`invoice-sheet relative ${bleed ? "invoice-sheet-bleed overflow-hidden" : "overflow-visible"} ${className}`}
       style={style}
     >

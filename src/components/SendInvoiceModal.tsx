@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button, Field, inputClass } from "@/components/ui";
 import { defaultSendCopy, sendInvoice } from "@/lib/send-invoice";
+import { shareInvoicePdf } from "@/lib/pdf/download";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { formatMoney } from "@/lib/format";
 
@@ -40,6 +41,32 @@ export function SendInvoiceModal({
   }, [open, doc, fromName]);
 
   if (!open) return null;
+
+  async function onShareWhatsApp() {
+    setBusy(true);
+    setError("");
+    setOk("");
+    try {
+      const result = await shareInvoicePdf(doc, {
+        title: subject || `Invoice ${doc.number || ""}`,
+        text: message,
+      });
+      setOk(
+        result === "shared"
+          ? "Share sheet opened — pick WhatsApp. The PDF matches your live preview."
+          : "PDF downloaded (this device can’t share files directly). Attach it in WhatsApp.",
+      );
+      onSent?.({ to: to.trim() || "share" });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("Share cancelled");
+      } else {
+        setError(err instanceof Error ? err.message : "Share failed");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,8 +111,8 @@ export function SendInvoiceModal({
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
               {doc.number || "Draft"} ·{" "}
-              {formatMoney(doc.totals.total, doc.currency)} — PDF attaches
-              automatically when your device supports it.
+              {formatMoney(doc.totals.total, doc.currency)} — PDF is a snapshot of
+              your live template.
             </p>
           </div>
           <Button type="button" variant="ghost" onClick={onClose}>
@@ -93,7 +120,25 @@ export function SendInvoiceModal({
           </Button>
         </div>
 
+        <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--wash)]/50 p-3">
+          <p className="text-sm font-medium text-[var(--ink)]">WhatsApp / share</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Best for phones — attaches the exact preview as a PDF.
+          </p>
+          <Button
+            type="button"
+            className="mt-3 w-full sm:w-auto"
+            disabled={busy}
+            onClick={() => void onShareWhatsApp()}
+          >
+            {busy ? "Preparing PDF…" : "Share PDF (WhatsApp)"}
+          </Button>
+        </div>
+
         <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">
+            Or email
+          </p>
           <Field label="To">
             <input
               className={inputClass}
@@ -134,12 +179,6 @@ export function SendInvoiceModal({
             Cancel
           </Button>
         </div>
-        <p className="mt-3 text-xs text-[var(--muted)]">
-          Uses your share sheet when available. Optional: set{" "}
-          <code className="rounded bg-[var(--wash)] px-1">RESEND_API_KEY</code> +{" "}
-          <code className="rounded bg-[var(--wash)] px-1">RESEND_FROM_EMAIL</code>{" "}
-          for one-click email from the server.
-        </p>
       </form>
     </div>
   );
