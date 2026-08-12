@@ -285,7 +285,11 @@ export async function buildInvoicePdfBlob(
                 "Invoice",
               ),
               number
-                ? createElement(Text, { style: styles.muted, marginTop: 8 }, "Reference")
+                ? createElement(
+                    Text,
+                    { style: { ...styles.muted, marginTop: 8 } },
+                    "Reference",
+                  )
                 : null,
               number
                 ? createElement(
