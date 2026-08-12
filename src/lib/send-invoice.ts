@@ -1,10 +1,10 @@
 "use client";
 
-import { buildInvoicePdfBlob } from "@/lib/pdf/download";
+import { buildInvoicePdfBlob, downloadPdfBlob, pdfFilenameFor } from "@/lib/pdf/download";
 import { formatMoney } from "@/lib/format";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 
-export type SendMethod = "share" | "email-api" | "mailto";
+export type SendMethod = "email-api" | "mailto" | "download";
 
 export interface SendInvoiceInput {
   doc: InvoiceViewModel;
@@ -18,10 +18,6 @@ export interface SendInvoiceInput {
 export interface SendInvoiceResult {
   method: SendMethod;
   detail: string;
-}
-
-function pdfFilename(doc: InvoiceViewModel) {
-  return `${(doc.number || "invoice").replace(/[^\w.-]+/g, "_")}.pdf`;
 }
 
 export function defaultSendCopy(doc: InvoiceViewModel, fromName?: string) {
@@ -61,15 +57,10 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
+/**
+ * Email send path — does NOT call navigator.share after PDF build
+ * (share must stay on a direct user tap; see Send modal WhatsApp flow).
+ */
 export async function sendInvoice(
   input: SendInvoiceInput,
 ): Promise<SendInvoiceResult> {
@@ -79,71 +70,57 @@ export async function sendInvoice(
   }
 
   const blob = await buildInvoicePdfBlob(doc);
-  const filename = pdfFilename(doc);
-  const file = new File([blob], filename, { type: "application/pdf" });
-
-  const canShareFiles =
-    typeof navigator !== "undefined" &&
-    typeof navigator.canShare === "function" &&
-    navigator.canShare({ files: [file] });
-
-  if (canShareFiles && typeof navigator.share === "function") {
-    try {
-      await navigator.share({
-        title: subject,
-        text: message,
-        files: [file],
-      });
-      return {
-        method: "share",
-        detail:
-          "Opened your share sheet with the PDF attached — pick Mail / Outlook / Gmail.",
-      };
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        throw new Error("Send cancelled");
-      }
-    }
-  }
+  const filename = pdfFilenameFor(doc);
 
   const pdfBase64 = await blobToBase64(blob);
-  const res = await fetch("/api/send-invoice", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      to: to.trim(),
-      subject,
-      message,
-      fromName,
-      fromEmail,
-      filename,
-      pdfBase64,
-      invoiceNumber: doc.number,
-    }),
-  });
-
-  if (res.ok) {
-    const data = (await res.json()) as { id?: string };
+  let res: Response;
+  try {
+    res = await fetch("/api/send-invoice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: to.trim(),
+        subject,
+        message,
+        fromName,
+        fromEmail,
+        filename,
+        pdfBase64,
+        invoiceNumber: doc.number,
+      }),
+    });
+  } catch {
+    downloadPdfBlob(blob, filename);
     return {
-      method: "email-api",
-      detail: data.id
-        ? `Email sent with PDF attached.`
-        : "Email sent with PDF attached.",
+      method: "download",
+      detail: `PDF downloaded (“${filename}”). Attach it in your email or WhatsApp.`,
     };
   }
 
-  if (res.status !== 503) {
-    const err = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(err?.error || "Email send failed");
+  if (res.ok) {
+    return {
+      method: "email-api",
+      detail: "Email sent with PDF attached.",
+    };
   }
 
-  downloadBlob(blob, filename);
-  const mailto = `mailto:${encodeURIComponent(to.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(
-    `${message}\n\n(The PDF “${filename}” was downloaded — attach it to this email before sending.)`,
-  )}`;
-  window.location.href = mailto;
-  return {
-    method: "mailto",
-    detail: `PDF downloaded and your email app opened. Attach “${filename}” before sending.`,
-  };
+  // Static / Skitz host has no email API — download + open mail app
+  if (res.status === 503 || res.status === 404) {
+    downloadPdfBlob(blob, filename);
+    const mailto = `mailto:${encodeURIComponent(to.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(
+      `${message}\n\n(The PDF “${filename}” was downloaded — attach it before sending.)`,
+    )}`;
+    window.location.href = mailto;
+    return {
+      method: "mailto",
+      detail: `PDF downloaded and your email app opened. Attach “${filename}” before sending.`,
+    };
+  }
+
+  const err = (await res.json().catch(() => null)) as { error?: string } | null;
+  downloadPdfBlob(blob, filename);
+  throw new Error(
+    err?.error ||
+      `Email send failed — PDF “${filename}” was downloaded so you can still send it.`,
+  );
 }
