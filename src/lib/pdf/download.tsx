@@ -38,31 +38,61 @@ export async function prepareInvoicePdfFile(
   return new File([blob], pdfFilenameFor(doc), { type: "application/pdf" });
 }
 
-export function canSharePdfFile(file: File): boolean {
+export function supportsWebShare(): boolean {
   return (
-    typeof navigator !== "undefined" &&
-    typeof navigator.canShare === "function" &&
-    typeof navigator.share === "function" &&
-    navigator.canShare({ files: [file] })
+    typeof navigator !== "undefined" && typeof navigator.share === "function"
   );
+}
+
+export function canSharePdfFile(file: File): boolean {
+  if (!supportsWebShare()) return false;
+  // Some browsers implement share but omit / lie about canShare({ files }).
+  if (typeof navigator.canShare !== "function") return true;
+  try {
+    return navigator.canShare({ files: [file] });
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Must run directly from a click/tap (user gesture).
- * Do not call after a long await — browsers will reject it.
+ * WhatsApp often rejects shares that include both text and files — send files only.
  */
 export async function sharePreparedPdfFile(
   file: File,
-  opts?: { title?: string; text?: string },
-): Promise<"shared" | "downloaded"> {
-  if (canSharePdfFile(file)) {
-    await navigator.share({
-      title: opts?.title,
-      text: opts?.text,
-      files: [file],
-    });
-    return "shared";
+): Promise<"shared" | "unsupported"> {
+  if (!supportsWebShare()) return "unsupported";
+
+  // Prefer files-only — most reliable for WhatsApp on Android/iOS.
+  try {
+    if (typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: file.name });
+      return "shared";
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    // Fall through and try a bare share / report unsupported
   }
-  downloadPdfBlob(file, file.name);
-  return "downloaded";
+
+  try {
+    await navigator.share({ files: [file] });
+    return "shared";
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    return "unsupported";
+  }
+}
+
+/** Digits only for wa.me (include country code, e.g. 2782…). */
+export function whatsappPhoneDigits(raw: string): string {
+  return raw.replace(/\D/g, "");
+}
+
+export function openWhatsAppWithText(text: string, phoneDigits?: string) {
+  const q = encodeURIComponent(text);
+  const href = phoneDigits
+    ? `https://wa.me/${phoneDigits}?text=${q}`
+    : `https://wa.me/?text=${q}`;
+  window.open(href, "_blank", "noopener,noreferrer");
 }

@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Field, inputClass } from "@/components/ui";
 import { defaultSendCopy, sendInvoice } from "@/lib/send-invoice";
 import {
   canSharePdfFile,
   downloadPdfBlob,
+  openWhatsAppWithText,
   prepareInvoicePdfFile,
   sharePreparedPdfFile,
+  supportsWebShare,
+  whatsappPhoneDigits,
 } from "@/lib/pdf/download";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { formatMoney } from "@/lib/format";
@@ -31,10 +34,13 @@ export function SendInvoiceModal({
   const [to, setTo] = useState(defaults.to);
   const [subject, setSubject] = useState(defaults.subject);
   const [message, setMessage] = useState(defaults.message);
+  const [waPhone, setWaPhone] = useState(doc.client.phone || "");
   const [busy, setBusy] = useState(false);
+  const [prepBusy, setPrepBusy] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [readyFile, setReadyFile] = useState<File | null>(null);
+  const readyFileRef = useRef<File | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -42,61 +48,82 @@ export function SendInvoiceModal({
     setTo(next.to);
     setSubject(next.subject);
     setMessage(next.message);
+    setWaPhone(doc.client.phone || "");
     setError("");
     setOk("");
+    readyFileRef.current = null;
     setReadyFile(null);
+
+    let cancelled = false;
+    setPrepBusy(true);
+    void prepareInvoicePdfFile(doc)
+      .then((file) => {
+        if (cancelled) return;
+        readyFileRef.current = file;
+        setReadyFile(file);
+        setOk(
+          canSharePdfFile(file) || supportsWebShare()
+            ? "PDF ready — tap WhatsApp below."
+            : "PDF ready — tap WhatsApp to download & open chat.",
+        );
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Could not prepare PDF");
+      })
+      .finally(() => {
+        if (!cancelled) setPrepBusy(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [open, doc, fromName]);
 
   if (!open) return null;
 
-  async function onPrepareShare() {
-    setBusy(true);
-    setError("");
-    setOk("");
-    setReadyFile(null);
-    try {
-      const file = await prepareInvoicePdfFile(doc);
-      setReadyFile(file);
-      setOk(
-        canSharePdfFile(file)
-          ? "PDF ready — tap “Open share sheet” below and pick WhatsApp."
-          : "PDF ready — tap Download, then attach it in WhatsApp.",
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not prepare PDF");
-    } finally {
-      setBusy(false);
+  async function onWhatsApp() {
+    const file = readyFileRef.current;
+    if (!file) {
+      setError("Still preparing the PDF — wait a moment, then try again.");
+      return;
     }
-  }
-
-  async function onOpenShareSheet() {
-    if (!readyFile) return;
     setError("");
     setOk("");
+
+    const phone = whatsappPhoneDigits(waPhone);
+    const shareText = [
+      subject,
+      "",
+      message,
+      "",
+      `(Attach the PDF “${file.name}” if it isn’t included.)`,
+    ].join("\n");
+
+    // 1) System share sheet with PDF (mobile Chrome / Safari / installed PWA)
     try {
-      // Must run in this click handler (user gesture) — not after PDF build.
-      const result = await sharePreparedPdfFile(readyFile, {
-        title: subject || `Invoice ${doc.number || ""}`,
-        text: message,
-      });
-      setOk(
-        result === "shared"
-          ? "Share sheet opened — pick WhatsApp."
-          : `PDF downloaded (“${readyFile.name}”). Attach it in WhatsApp.`,
-      );
-      onSent?.({ to: to.trim() || "share" });
+      const result = await sharePreparedPdfFile(file);
+      if (result === "shared") {
+        setOk("Share sheet opened — pick WhatsApp.");
+        onSent?.({ to: phone || "whatsapp" });
+        return;
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setError("Share cancelled");
         return;
       }
-      // Gesture / share failures → still give them the file
-      downloadPdfBlob(readyFile, readyFile.name);
-      setOk(
-        `PDF downloaded (“${readyFile.name}”). Open WhatsApp and attach that file.`,
-      );
-      onSent?.({ to: to.trim() || "share" });
     }
+
+    // 2) Fallback: download PDF + open WhatsApp with the message
+    downloadPdfBlob(file, file.name);
+    openWhatsAppWithText(shareText, phone || undefined);
+    setOk(
+      phone
+        ? `PDF downloaded — WhatsApp opened for that number. Attach “${file.name}” if needed.`
+        : `PDF downloaded — WhatsApp opened. Attach “${file.name}” in the chat.`,
+    );
+    onSent?.({ to: phone || "whatsapp" });
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -121,6 +148,8 @@ export function SendInvoiceModal({
       setBusy(false);
     }
   }
+
+  const waReady = Boolean(readyFile) && !prepBusy;
 
   return (
     <div
@@ -151,28 +180,31 @@ export function SendInvoiceModal({
         </div>
 
         <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--wash)]/50 p-3">
-          <p className="text-sm font-medium text-[var(--ink)]">WhatsApp / share</p>
+          <p className="text-sm font-medium text-[var(--ink)]">WhatsApp</p>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Step 1: prepare the PDF. Step 2: open the share sheet (required by the
-            browser).
+            On phones, this opens the share sheet with the PDF. On desktop it
+            downloads the PDF and opens WhatsApp — attach the file in the chat.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <Field label="WhatsApp number (optional, with country code)">
+            <input
+              className={inputClass + " mt-2"}
+              inputMode="tel"
+              value={waPhone}
+              onChange={(e) => setWaPhone(e.target.value)}
+              placeholder="27821234567"
+            />
+          </Field>
+          <div className="mt-3">
             <Button
               type="button"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void onPrepareShare()}
+              disabled={!waReady || busy}
+              onClick={() => void onWhatsApp()}
             >
-              {busy && !readyFile ? "Preparing PDF…" : "1. Prepare PDF"}
-            </Button>
-            <Button
-              type="button"
-              disabled={busy || !readyFile}
-              onClick={() => void onOpenShareSheet()}
-            >
-              {readyFile && canSharePdfFile(readyFile)
-                ? "2. Open share sheet"
-                : "2. Download PDF"}
+              {prepBusy
+                ? "Preparing PDF…"
+                : waReady
+                  ? "Send via WhatsApp"
+                  : "Preparing…"}
             </Button>
           </div>
         </div>
@@ -183,7 +215,7 @@ export function SendInvoiceModal({
           </p>
           <p className="text-xs text-[var(--muted)]">
             Opens your mail app with this message. The PDF downloads separately —
-            attach it before you send (browsers can’t auto-attach via email).
+            attach it before you send.
           </p>
           <Field label="To">
             <input
@@ -218,7 +250,7 @@ export function SendInvoiceModal({
         {ok ? <p className="mt-3 text-sm text-teal-800">{ok}</p> : null}
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy || prepBusy}>
             {busy ? "Preparing…" : "Open email + PDF"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
