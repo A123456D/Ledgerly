@@ -167,6 +167,8 @@ export interface Invoice {
   taxMode: TaxMode;
   templateId: TemplateId;
   accentColor: string;
+  /** Typography pair for this invoice; falls back to business default */
+  fontPair?: FontPair;
   /** Which saved business logo to print; null = none */
   logoId?: string | null;
   notes: string;

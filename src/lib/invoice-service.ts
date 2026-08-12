@@ -159,6 +159,7 @@ export async function createDraftInvoice(options?: {
   let paymentInstructions = business.paymentTerms;
   let templateId: TemplateId = settings.defaultTemplate;
   let accentColor = business.accentColor;
+  let fontPair = business.fontPair;
   let taxMode = business.taxMode;
   let currency = business.currency;
   let logoId: string | null | undefined = business.defaultLogoId;
@@ -178,6 +179,7 @@ export async function createDraftInvoice(options?: {
         source.paymentInstructions || business.paymentTerms;
       templateId = source.templateId;
       accentColor = source.accentColor;
+      fontPair = source.fontPair ?? business.fontPair;
       taxMode = source.taxMode;
       currency = source.currency;
       logoId = source.logoId ?? business.defaultLogoId;
@@ -203,6 +205,7 @@ export async function createDraftInvoice(options?: {
     taxMode,
     templateId,
     accentColor,
+    fontPair,
     logoId,
     notes,
     paymentInstructions,
@@ -297,7 +300,11 @@ export async function issueInvoice(id: string): Promise<Invoice> {
   const snapshot: IssuedSnapshot = {
     number,
     issuedAt: new Date().toISOString(),
-    business: businessToParty(business, logoId),
+    business: {
+      ...businessToParty(business, logoId),
+      accentColor: linked.accentColor || business.accentColor,
+      fontPair: linked.fontPair || business.fontPair,
+    },
     client: { ...linked.client },
     currency: linked.currency,
     taxMode: linked.taxMode,
@@ -429,6 +436,7 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
     taxMode: invoice.taxMode,
     templateId: invoice.templateId,
     accentColor: invoice.accentColor,
+    fontPair: invoice.fontPair,
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,
     notes: invoice.notes,
@@ -475,7 +483,7 @@ export async function displayDocumentLive(
     taxMode: invoice.taxMode,
     templateId: invoice.templateId,
     accentColor: accent,
-    fontPair: business.fontPair,
+    fontPair: invoice.fontPair ?? business.fontPair,
     logoDataUrl: resolveLogoDataUrl(business, logoId),
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,

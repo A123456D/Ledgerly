@@ -15,9 +15,10 @@ import {
   restoreAutoBackup,
 } from "@/lib/auto-backup";
 import { getBusiness, getSettings, saveBusiness, saveSettings } from "@/lib/db";
-import type { Business, FontPair, TaxMode, TemplateId } from "@/lib/types";
+import type { Business, TaxMode, TemplateId } from "@/lib/types";
 import { Button, Field, PageHeader, inputClass } from "@/components/ui";
 import { LogoLibrary } from "@/components/LogoUploader";
+import { BrandLookControls } from "@/components/BrandLookControls";
 import { TemplatePicker } from "@/components/TemplatePicker";
 import { formatDate } from "@/lib/format";
 import Link from "next/link";
@@ -197,17 +198,13 @@ export function SettingsPage() {
             <Field label="Invoice prefix" hint="Numbers format as PREFIX-YEAR-0001">
               <input className={inputClass} value={form.invoicePrefix} onChange={(e) => patch("invoicePrefix", e.target.value)} />
             </Field>
-            <Field label="Accent color">
-              <input className={inputClass} type="color" value={form.accentColor} onChange={(e) => patch("accentColor", e.target.value)} />
-            </Field>
-            <Field label="Font pair">
-              <select className={inputClass} value={form.fontPair} onChange={(e) => patch("fontPair", e.target.value as FontPair)}>
-                <option value="editorial">Editorial</option>
-                <option value="modern">Modern</option>
-                <option value="mono">Mono</option>
-              </select>
-            </Field>
           </div>
+          <BrandLookControls
+            accentColor={form.accentColor}
+            fontPair={form.fontPair}
+            onAccentChange={(accentColor) => patch("accentColor", accentColor)}
+            onFontChange={(fontPair) => patch("fontPair", fontPair)}
+          />
           <Field label="Payment terms / instructions">
             <textarea className={inputClass} rows={3} value={form.paymentTerms} onChange={(e) => patch("paymentTerms", e.target.value)} />
           </Field>

@@ -20,10 +20,11 @@ import {
 } from "@/lib/invoice-service";
 import { downloadInvoicePdf } from "@/lib/pdf/download";
 import { TemplatePicker } from "@/components/TemplatePicker";
+import { BrandLookControls } from "@/components/BrandLookControls";
 import { LogoLibrary } from "@/components/LogoUploader";
 import { SendInvoiceModal } from "@/components/SendInvoiceModal";
 import { db, getBusiness, saveBusiness } from "@/lib/db";
-import type { Invoice, LineItem, TaxMode } from "@/lib/types";
+import type { FontPair, Invoice, LineItem, TaxMode } from "@/lib/types";
 import {
   INVOICE_VISIBILITY_OPTIONS,
   resolveVisibility,
@@ -533,14 +534,6 @@ export function InvoiceEditor({ id }: { id: string }) {
                   <option value="inclusive">Inclusive (VAT in price)</option>
                 </select>
               </Field>
-              <Field label="Accent">
-                <input
-                  className={inputClass}
-                  type="color"
-                  value={invoice.accentColor}
-                  onChange={(e) => update({ accentColor: e.target.value })}
-                />
-              </Field>
             </div>
 
             <div className="rounded-lg border border-[var(--line)] bg-[var(--wash)]/50 p-3 sm:p-4">
@@ -607,11 +600,22 @@ export function InvoiceEditor({ id }: { id: string }) {
                 onChange={(id) => update({ templateId: id })}
                 onAccentSuggest={(accent) => update({ accentColor: accent })}
               />
+              <div className="mt-3">
+                <BrandLookControls
+                  accentColor={invoice.accentColor}
+                  fontPair={
+                    (invoice.fontPair as FontPair | undefined) ||
+                    business?.fontPair ||
+                    "editorial"
+                  }
+                  onAccentChange={(accentColor) => update({ accentColor })}
+                  onFontChange={(fontPair) => update({ fontPair })}
+                />
+              </div>
               <p className="mt-2 text-xs text-[var(--muted)]">
-                Pick a built-in style. Upload logos below — use Remove BG if needed. Manage
-                defaults under{" "}
-                <Link href="/templates" className="underline">
-                  Templates
+                Colour and font update the live preview and PDF. Defaults live under{" "}
+                <Link href="/settings" className="underline">
+                  Settings
                 </Link>
                 .
               </p>

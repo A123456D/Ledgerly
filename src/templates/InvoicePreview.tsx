@@ -13,8 +13,10 @@ import type { InvoiceVisibility } from "@/lib/invoice-visibility";
 import { isVisible, resolveVisibility } from "@/lib/invoice-visibility";
 import { formatDate, formatMoney } from "@/lib/format";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "@/lib/templates/catalog";
+import { fontPairCssVars } from "@/lib/fonts";
 
 const LogoVisibleCtx = createContext(true);
+const FontPairCtx = createContext<FontPair>("editorial");
 
 export interface InvoiceViewModel {
   number: string;
@@ -428,11 +430,12 @@ function Sheet({
   style?: CSSProperties;
   bleed?: boolean;
 }) {
+  const fontPair = useContext(FontPairCtx);
   return (
     <article
       data-invoice-sheet="true"
       className={`invoice-sheet relative ${bleed ? "invoice-sheet-bleed overflow-hidden" : "overflow-visible"} ${className}`}
-      style={style}
+      style={{ ...fontPairCssVars(fontPair), ...style }}
     >
       {children}
     </article>
@@ -1204,6 +1207,10 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
     );
 
   return (
-    <LogoVisibleCtx.Provider value={visibility.logo}>{tree}</LogoVisibleCtx.Provider>
+    <LogoVisibleCtx.Provider value={visibility.logo}>
+      <FontPairCtx.Provider value={view.fontPair || "editorial"}>
+        {tree}
+      </FontPairCtx.Provider>
+    </LogoVisibleCtx.Provider>
   );
 }
