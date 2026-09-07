@@ -1,6 +1,6 @@
 /**
  * Build a static EasyLedger export for embedding under the SKITZ Apps catalog.
- * Output: ../SHIFTR/website/public/apps/issueledger/web
+ * Output: ../SHIFTR/website/public/apps/easyledger/web
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -8,11 +8,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const basePath = "/apps/issueledger/web";
+const basePath = "/apps/easyledger/web";
 const apiDir = path.join(root, "src", "app", "api");
 const apiPark = path.join(root, "src", "app", "_api_parked_for_export");
 const outDir = path.join(root, "out");
-const dest = path.resolve(root, "..", "SHIFTR", "website", "public", "apps", "issueledger", "web");
+const dest = path.resolve(root, "..", "SHIFTR", "website", "public", "apps", "easyledger", "web");
 
 function run(cmd, args, env = {}) {
   const r = spawnSync(cmd, args, {

@@ -619,7 +619,11 @@ export function RunwayTool() {
           value={0}
           copied={copied === "Date"}
           onCopy={() => {
-            if (result.runwayEnds) void copyText(result.runwayEnds).then((ok) => ok && onCopy("Date", 0));
+            if (result.runwayEnds) {
+              void copyText(result.runwayEnds).then((ok) => {
+                if (ok) void onCopy("Date", 0);
+              });
+            }
           }}
           display={result.runwayEnds ? formatDate(result.runwayEnds) : "—"}
         />

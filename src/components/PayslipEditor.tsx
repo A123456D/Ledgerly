@@ -213,9 +213,11 @@ export function PayslipEditor({ id }: { id: string }) {
   }
 
   async function onDuplicate() {
+    const current = slipRef.current;
+    if (!current) return;
     setBusy(true);
     try {
-      const copy = await duplicatePayslip(slip.id);
+      const copy = await duplicatePayslip(current.id);
       router.push(`/payslip?id=${copy.id}`);
     } finally {
       setBusy(false);
