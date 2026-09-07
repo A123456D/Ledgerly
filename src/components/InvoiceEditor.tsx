@@ -17,6 +17,7 @@ import {
   recomputeTotals,
   saveInvoice,
   deleteDraftInvoice,
+  convertQuoteToInvoice,
 } from "@/lib/invoice-service";
 import { downloadInvoicePdf } from "@/lib/pdf/download";
 import { TemplatePicker } from "@/components/TemplatePicker";
@@ -63,6 +64,14 @@ import {
   saveInvoiceDesignTemplate,
 } from "@/lib/custom-templates";
 import { isCustomTemplateId } from "@/lib/types";
+import {
+  documentHref,
+  documentListHref,
+  dueDateLabel,
+  issueDateLabel,
+  isQuote,
+} from "@/lib/document-kind";
+import type { InvoiceStatus } from "@/lib/types";
 
 export function InvoiceEditor({ id }: { id: string }) {
   const router = useRouter();
@@ -105,9 +114,9 @@ export function InvoiceEditor({ id }: { id: string }) {
 
   useEffect(() => {
     if (invoice?.status === "draft") {
-      peekDraftNumber().then(setPeekNumber);
+      peekDraftNumber(invoice.kind).then(setPeekNumber);
     }
-  }, [invoice?.status, business?.invoicePrefix]);
+  }, [invoice?.status, invoice?.kind, business?.invoicePrefix, business?.quotePrefix]);
 
   // Must stay above any early return — hooks cannot be conditional.
   // Preview is refreshed async; overlay live design fields so drag/resize never snaps back.
@@ -121,6 +130,7 @@ export function InvoiceEditor({ id }: { id: string }) {
       sectionAccents: invoice.sectionAccents ?? preview.sectionAccents,
       accentColor: invoice.accentColor || preview.accentColor,
       fontPair: invoice.fontPair ?? preview.fontPair,
+      kind: invoice.kind ?? preview.kind,
       templateId: invoice.templateId,
       logoSizePx: invoice.logoSizePx ?? preview.logoSizePx,
       visibility: invoice.visibility ?? preview.visibility,
@@ -128,10 +138,11 @@ export function InvoiceEditor({ id }: { id: string }) {
   }, [preview, invoice]);
 
   if (!invoice) {
-    return <p className="text-sm text-[var(--muted)]">Loading invoice…</p>;
+    return <p className="text-sm text-[var(--muted)]">Loading…</p>;
   }
 
   const locked = invoice.status !== "draft";
+  const quoteDoc = isQuote(invoice.kind);
   const vis = resolveVisibility(invoice.visibility);
 
   function toggleFieldVisibility(key: InvoiceVisibleField) {
@@ -408,8 +419,8 @@ export function InvoiceEditor({ id }: { id: string }) {
       setInvoice(issued);
       setMessage(
         issued.clientId
-          ? `Issued as ${issued.number} — client saved`
-          : `Issued as ${issued.number}`,
+          ? `${isQuote(issued.kind) ? "Sent" : "Issued"} as ${issued.number} — client saved`
+          : `${isQuote(issued.kind) ? "Sent" : "Issued"} as ${issued.number}`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Issue failed");
@@ -449,7 +460,7 @@ export function InvoiceEditor({ id }: { id: string }) {
     setBusy(true);
     try {
       const copy = await duplicateInvoice(current.id);
-      router.push(`/invoice?id=${copy.id}`);
+      router.push(documentHref(copy.kind, copy.id));
     } finally {
       setBusy(false);
     }
@@ -462,14 +473,14 @@ export function InvoiceEditor({ id }: { id: string }) {
     setError("");
     try {
       await deleteDraftInvoice(invoice.id);
-      router.push("/");
+      router.push(documentListHref(invoice.kind));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
       setBusy(false);
     }
   }
 
-  async function onStatus(status: "paid" | "void" | "issued") {
+  async function onStatus(status: InvoiceStatus) {
     if (!invoice) return;
     const current = invoice;
     setBusy(true);
@@ -480,6 +491,22 @@ export function InvoiceEditor({ id }: { id: string }) {
       setMessage(`Marked ${status}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onConvertToInvoice() {
+    if (!invoice) return;
+    const current = invoice;
+    setBusy(true);
+    setError("");
+    try {
+      const next = await convertQuoteToInvoice(current.id);
+      setMessage(`Converted to invoice ${next.number || "draft"}`);
+      router.push(documentHref("invoice", next.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Convert failed");
     } finally {
       setBusy(false);
     }
@@ -511,27 +538,27 @@ export function InvoiceEditor({ id }: { id: string }) {
   }
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="mb-4 flex flex-col gap-3">
         <div>
-          <Link href="/" className="text-xs text-[var(--muted)] hover:underline">
-            ← All invoices
+          <Link href={documentListHref(invoice.kind)} className="text-xs text-[var(--muted)] hover:underline">
+            ← All {quoteDoc ? "quotes" : "invoices"}
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <h1 className="min-w-0 break-all font-[family-name:var(--font-display)] text-xl text-[var(--ink)] sm:text-3xl">
               {invoice.number || peekNumber || "Draft"}
             </h1>
-            <StatusPill status={invoice.status} />
+            <StatusPill status={invoice.status} kind={invoice.kind} />
           </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 nav-scroll sm:flex-wrap sm:overflow-visible">
+        <div className="flex flex-wrap gap-2">
           {!locked ? (
             <>
               <Button variant="secondary" className="shrink-0" onClick={onSave} disabled={busy}>
                 Save
               </Button>
               <Button className="shrink-0" onClick={onIssue} disabled={busy}>
-                Issue
+                {quoteDoc ? "Send quote" : "Issue"}
               </Button>
               <Button
                 variant="danger"
@@ -544,12 +571,27 @@ export function InvoiceEditor({ id }: { id: string }) {
             </>
           ) : (
             <>
-              {invoice.status === "issued" ? (
+              {quoteDoc && (invoice.status === "issued" || invoice.status === "accepted") ? (
+                <Button className="shrink-0" onClick={() => void onConvertToInvoice()} disabled={busy}>
+                  Convert to invoice
+                </Button>
+              ) : null}
+              {quoteDoc && invoice.status === "issued" ? (
+                <>
+                  <Button variant="secondary" className="shrink-0" onClick={() => onStatus("accepted")} disabled={busy}>
+                    Mark accepted
+                  </Button>
+                  <Button variant="ghost" className="shrink-0" onClick={() => onStatus("declined")} disabled={busy}>
+                    Mark declined
+                  </Button>
+                </>
+              ) : null}
+              {!quoteDoc && invoice.status === "issued" ? (
                 <Button variant="secondary" className="shrink-0" onClick={() => onStatus("paid")} disabled={busy}>
                   Mark paid
                 </Button>
               ) : null}
-              {invoice.status === "paid" ? (
+              {!quoteDoc && invoice.status === "paid" ? (
                 <Button variant="ghost" className="shrink-0" onClick={() => onStatus("issued")} disabled={busy}>
                   Mark unpaid
                 </Button>
@@ -720,12 +762,12 @@ export function InvoiceEditor({ id }: { id: string }) {
               </div>
             </div>
 
-            <div id="edit-section-dates" className="grid gap-3 sm:grid-cols-4">
+            <div id="edit-section-dates" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field
                 label="Reference number"
                 hint={
                   invoice.status === "draft"
-                    ? "Preview only — locked in when you Issue"
+                    ? `Preview only — locked in when you ${quoteDoc ? "send" : "Issue"}`
                     : undefined
                 }
               >
@@ -739,7 +781,7 @@ export function InvoiceEditor({ id }: { id: string }) {
               <Field
                 label={
                   <span className="flex items-center justify-between gap-2">
-                    Issue date
+                    {issueDateLabel(invoice.kind)}
                     {fieldShowCheckbox("issueDate")}
                   </span>
                 }
@@ -765,7 +807,7 @@ export function InvoiceEditor({ id }: { id: string }) {
               <Field
                 label={
                   <span className="flex items-center justify-between gap-2">
-                    Due date
+                    {dueDateLabel(invoice.kind)}
                     {fieldShowCheckbox("dueDate")}
                   </span>
                 }
@@ -818,7 +860,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                 <div className="flex flex-wrap gap-2">
                   {catalog && catalog.length > 0 ? (
                     <select
-                      className={inputClass + " w-auto min-w-[10rem]"}
+                      className={inputClass + " w-full min-w-0 sm:w-auto sm:min-w-[10rem]"}
                       defaultValue=""
                       onChange={(e) => {
                         if (e.target.value) {
@@ -841,7 +883,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                 </div>
               </div>
 
-              <div className="hidden border-b border-[var(--line)] bg-[var(--wash)]/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted)] sm:grid sm:grid-cols-[minmax(0,1fr)_4.25rem_5.5rem_3.75rem_3.75rem_5.5rem_3.25rem] sm:gap-2">
+              <div className="hidden border-b border-[var(--line)] bg-[var(--wash)]/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted)] lg:grid lg:grid-cols-[minmax(0,1fr)_4.25rem_5.5rem_3.75rem_3.75rem_5.5rem_3.25rem] lg:gap-2">
                 <span>Description</span>
                 <span className="text-right">Qty</span>
                 <span className="text-right">Rate</span>
@@ -860,10 +902,10 @@ export function InvoiceEditor({ id }: { id: string }) {
                   return (
                     <div
                       key={line.id}
-                      className="p-3 sm:grid sm:grid-cols-[minmax(0,1fr)_4.25rem_5.5rem_3.75rem_3.75rem_5.5rem_3.25rem] sm:items-start sm:gap-2 sm:px-4 sm:py-3"
+                      className="p-3 lg:grid lg:grid-cols-[minmax(0,1fr)_4.25rem_5.5rem_3.75rem_3.75rem_5.5rem_3.25rem] lg:items-start lg:gap-2 lg:px-4 lg:py-3"
                     >
-                      <div className="min-w-0 sm:pt-1">
-                        <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                      <div className="min-w-0 lg:pt-1">
+                        <label className="mb-1 block text-xs font-medium text-[var(--muted)] lg:sr-only">
                           Description
                         </label>
                         <input
@@ -886,9 +928,9 @@ export function InvoiceEditor({ id }: { id: string }) {
                         />
                       </div>
 
-                      <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-0 sm:contents">
+                      <div className="mt-3 grid grid-cols-2 gap-2 lg:mt-0 lg:contents">
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] lg:sr-only">
                             Qty
                           </label>
                           <DecimalInput
@@ -901,7 +943,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] lg:sr-only">
                             Rate ({invoice.currency})
                           </label>
                           <DecimalInput
@@ -914,7 +956,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] lg:sr-only">
                             VAT %
                           </label>
                           <DecimalInput
@@ -927,7 +969,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] sm:sr-only">
+                          <label className="mb-1 block text-xs font-medium text-[var(--muted)] lg:sr-only">
                             Disc %
                           </label>
                           <DecimalInput
@@ -941,8 +983,8 @@ export function InvoiceEditor({ id }: { id: string }) {
                         </div>
                       </div>
 
-                      <div className="mt-3 flex items-center justify-between gap-2 sm:mt-0 sm:flex-col sm:items-end sm:justify-start sm:pt-2">
-                        <label className="text-xs font-medium text-[var(--muted)] sm:sr-only">
+                      <div className="mt-3 flex items-center justify-between gap-2 lg:mt-0 lg:flex-col lg:items-end lg:justify-start lg:pt-2">
+                        <label className="text-xs font-medium text-[var(--muted)] lg:sr-only">
                           Amount
                         </label>
                         <span className="text-sm font-medium tabular-nums">
@@ -950,7 +992,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                         </span>
                       </div>
 
-                      <div className="mt-1 flex justify-end sm:mt-0 sm:justify-center sm:pt-2">
+                      <div className="mt-1 flex justify-end lg:mt-0 lg:justify-center lg:pt-2">
                         <button
                           type="button"
                           className="text-xs text-red-700 underline-offset-2 hover:underline disabled:opacity-40"
@@ -1251,7 +1293,7 @@ export function InvoiceEditor({ id }: { id: string }) {
           ) : null}
           <div
             data-invoice-preview-root="true"
-            className="min-w-0 max-h-[min(70vh,calc(100dvh-8rem))] overflow-x-auto overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 pb-8 sm:max-h-[calc(100dvh-7rem)] sm:p-5 sm:pb-10 xl:max-h-[calc(100dvh-6.5rem)]"
+            className="min-w-0 max-h-[min(70vh,calc(100dvh-8rem))] overflow-x-hidden overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 pb-8 sm:max-h-[calc(100dvh-7rem)] sm:p-5 sm:pb-10 xl:max-h-[calc(100dvh-6.5rem)]"
             onClick={(e) => {
               if (locked) return;
               const t = e.target as HTMLElement | null;
@@ -1268,7 +1310,7 @@ export function InvoiceEditor({ id }: { id: string }) {
           >
             <DecorationEditContext.Provider value={decorationEditContext}>
               <InvoiceEditContext.Provider value={editContext}>
-                <InvoiceStage maxScale={1} minScale={0.28}>
+                <InvoiceStage maxScale={1} minScale={0.2}>
                   {livePreview ? <InvoicePreview doc={livePreview} /> : null}
                 </InvoiceStage>
               </InvoiceEditContext.Provider>

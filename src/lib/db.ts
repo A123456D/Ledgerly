@@ -7,6 +7,7 @@ import {
   type Client,
   type CustomTemplate,
   type Invoice,
+  type Payslip,
   DEFAULT_ACCENT,
 } from "./types";
 import { normalizeBusinessLogos } from "./logos";
@@ -16,6 +17,7 @@ export class InvoiceDatabase extends Dexie {
   clients!: EntityTable<Client, "id">;
   items!: EntityTable<CatalogItem, "id">;
   invoices!: EntityTable<Invoice, "id">;
+  payslips!: EntityTable<Payslip, "id">;
   settings!: EntityTable<AppSettings, "id">;
   customTemplates!: EntityTable<CustomTemplate, "id">;
   autoBackups!: EntityTable<AutoBackupRecord, "id">;
@@ -46,6 +48,25 @@ export class InvoiceDatabase extends Dexie {
       customTemplates: "id, name, createdAt",
       autoBackups: "id, createdAt",
     });
+    this.version(4).stores({
+      business: "id",
+      clients: "id, name, updatedAt",
+      items: "id, description",
+      invoices: "id, status, number, clientId, updatedAt, createdAt, kind",
+      settings: "id",
+      customTemplates: "id, name, createdAt",
+      autoBackups: "id, createdAt",
+    });
+    this.version(5).stores({
+      business: "id",
+      clients: "id, name, updatedAt",
+      items: "id, description",
+      invoices: "id, status, number, clientId, updatedAt, createdAt, kind",
+      payslips: "id, status, number, clientId, updatedAt, createdAt",
+      settings: "id",
+      customTemplates: "id, name, createdAt",
+      autoBackups: "id, createdAt",
+    });
   }
 }
 
@@ -72,6 +93,8 @@ export function defaultBusiness(): Business {
     paymentTerms: "Payment due within 14 days of issue.",
     netDays: 14,
     invoicePrefix: "INV-",
+    quotePrefix: "QUO-",
+    payslipPrefix: "PAY-",
     createdAt: now,
     updatedAt: now,
   };
@@ -82,6 +105,10 @@ export function defaultSettings(): AppSettings {
     id: "default",
     nextSequence: 1,
     sequenceYear: new Date().getFullYear(),
+    nextQuoteSequence: 1,
+    quoteSequenceYear: new Date().getFullYear(),
+    nextPayslipSequence: 1,
+    payslipSequenceYear: new Date().getFullYear(),
     defaultTemplate: "classic",
     autoBackupEnabled: true,
     autoBackupKeep: 10,
@@ -96,28 +123,68 @@ export async function ensureDefaults(): Promise<{
   if (!business) {
     business = defaultBusiness();
     await db.business.put(business);
-  } else if (business.currency === "EUR" && business.defaultTaxRate === 21) {
-    // Migrate previous EU factory defaults → SA (ZAR + 15% VAT)
-    business = {
-      ...business,
-      currency: "ZAR",
-      defaultTaxRate: 15,
-      country: business.country || "South Africa",
-      updatedAt: new Date().toISOString(),
-    };
-    await db.business.put(business);
+  } else {
+    let next = business;
+    if (next.currency === "EUR" && next.defaultTaxRate === 21) {
+      // Migrate previous EU factory defaults → SA (ZAR + 15% VAT)
+      next = {
+        ...next,
+        currency: "ZAR",
+        defaultTaxRate: 15,
+        country: next.country || "South Africa",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (!next.quotePrefix) {
+      next = {
+        ...next,
+        quotePrefix: "QUO-",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (!next.payslipPrefix) {
+      next = {
+        ...next,
+        payslipPrefix: "PAY-",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (next !== business) {
+      business = next;
+      await db.business.put(business);
+    }
   }
   let settings = await db.settings.get("default");
   if (!settings) {
     settings = defaultSettings();
     await db.settings.put(settings);
-  } else if (settings.autoBackupEnabled === undefined) {
-    settings = {
-      ...settings,
-      autoBackupEnabled: true,
-      autoBackupKeep: settings.autoBackupKeep ?? 10,
-    };
-    await db.settings.put(settings);
+  } else {
+    let next = settings;
+    if (settings.autoBackupEnabled === undefined) {
+      next = {
+        ...next,
+        autoBackupEnabled: true,
+        autoBackupKeep: settings.autoBackupKeep ?? 10,
+      };
+    }
+    if (next.nextQuoteSequence === undefined) {
+      next = {
+        ...next,
+        nextQuoteSequence: 1,
+        quoteSequenceYear: next.quoteSequenceYear ?? new Date().getFullYear(),
+      };
+    }
+    if (next.nextPayslipSequence === undefined) {
+      next = {
+        ...next,
+        nextPayslipSequence: 1,
+        payslipSequenceYear: next.payslipSequenceYear ?? new Date().getFullYear(),
+      };
+    }
+    if (next !== settings) {
+      settings = next;
+      await db.settings.put(settings);
+    }
   }
   return { business, settings };
 }

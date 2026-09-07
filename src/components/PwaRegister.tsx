@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-/** Registers the Ledgerly service worker in production builds only. */
+/** Registers the EasyLedger service worker in production builds only. */
 export function PwaRegister() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;

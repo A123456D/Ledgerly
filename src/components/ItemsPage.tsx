@@ -70,7 +70,7 @@ export function ItemsPage() {
         subtitle="Line-item presets for day rates, retainers, and packages."
       />
       <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
-        <form onSubmit={onSave} className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <form onSubmit={onSave} className="min-w-0 space-y-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 sm:p-5">
           <h2 className="font-[family-name:var(--font-display)] text-xl">
             {editingId ? "Edit item" : "New preset"}
           </h2>
@@ -83,7 +83,7 @@ export function ItemsPage() {
               placeholder="e.g. Design day rate"
             />
           </Field>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="Unit price">
               <input
                 className={inputClass}
@@ -144,7 +144,7 @@ export function ItemsPage() {
             items.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] px-4 py-3"
+                className="flex flex-col gap-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   <p className="font-medium">{item.description}</p>

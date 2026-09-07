@@ -1,6 +1,13 @@
 import type { InvoiceVisibility } from "@/lib/invoice-visibility";
 
-export type InvoiceStatus = "draft" | "issued" | "paid" | "void";
+export type DocKind = "invoice" | "quote";
+export type InvoiceStatus =
+  | "draft"
+  | "issued"
+  | "paid"
+  | "void"
+  | "accepted"
+  | "declined";
 export type TaxMode = "exclusive" | "inclusive";
 export type FontPair = "editorial" | "modern" | "mono" | "classic";
 
@@ -155,6 +162,8 @@ export interface Business {
   paymentTerms: string;
   netDays: number;
   invoicePrefix: string;
+  quotePrefix: string;
+  payslipPrefix?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -251,8 +260,14 @@ export interface IssuedSnapshot {
 
 export interface Invoice {
   id: string;
+  /** Missing on older records — treat as invoice. */
+  kind?: DocKind;
   status: InvoiceStatus;
   number: string | null;
+  /** Quote that this invoice was created from */
+  sourceQuoteId?: string | null;
+  /** Invoice created from this quote */
+  convertedInvoiceId?: string | null;
   clientId: string | null;
   client: PartySnapshot;
   issueDate: string;
@@ -284,10 +299,58 @@ export interface Invoice {
   updatedAt: string;
 }
 
+export type PayslipStatus = "draft" | "issued" | "void";
+
+export interface PayLine {
+  id: string;
+  label: string;
+  amount: number;
+}
+
+export interface PayslipEmployee {
+  name: string;
+  email: string;
+  taxId: string;
+  employeeNumber: string;
+  jobTitle: string;
+  address: string;
+}
+
+export interface PayslipTotals {
+  gross: number;
+  deductionTotal: number;
+  net: number;
+}
+
+export interface Payslip {
+  id: string;
+  status: PayslipStatus;
+  number: string | null;
+  clientId: string | null;
+  employee: PayslipEmployee;
+  periodStart: string;
+  periodEnd: string;
+  payDate: string;
+  currency: string;
+  accentColor: string;
+  fontPair: FontPair;
+  logoId?: string | null;
+  earnings: PayLine[];
+  deductions: PayLine[];
+  notes: string;
+  totals: PayslipTotals;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppSettings {
   id: "default";
   nextSequence: number;
   sequenceYear: number;
+  nextQuoteSequence?: number;
+  quoteSequenceYear?: number;
+  nextPayslipSequence?: number;
+  payslipSequenceYear?: number;
   defaultTemplate: TemplateId;
   /** Silent snapshots in IndexedDB (default on). */
   autoBackupEnabled?: boolean;

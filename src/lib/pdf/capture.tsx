@@ -77,6 +77,7 @@ async function captureNode(node: HTMLElement): Promise<string> {
     style: {
       transform: "none",
       boxShadow: "none",
+      backfaceVisibility: "visible",
     },
     filter: (el) => {
       if (!(el instanceof Element)) return true;
@@ -194,6 +195,12 @@ async function captureRemountedPreview(doc: InvoiceViewModel): Promise<Blob> {
     root.unmount();
     host.remove();
   }
+}
+
+export async function buildPayslipPdfBlobFromPreview(): Promise<Blob> {
+  const live = await captureLivePreviewSheet();
+  if (!live) throw new Error("Payslip preview is not ready — wait a moment and try again");
+  return live;
 }
 
 /** Build a PDF that matches the on-screen template as closely as possible. */

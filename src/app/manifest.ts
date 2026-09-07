@@ -1,13 +1,15 @@
 import type { MetadataRoute } from "next";
 
+import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
+
 export const dynamic = "force-static";
 
 const base = (process.env.SKITZ_BASE_PATH || "").replace(/\/$/, "");
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Ledgerly — Freelancer Invoice Maker",
-    short_name: "Ledgerly",
+    name: `${APP_NAME} — ${APP_TAGLINE}`,
+    short_name: APP_NAME,
     description:
       "Beautiful, fast, compliant invoices for freelancers. Local-first. No account required.",
     start_url: base ? `${base}/` : "/",

@@ -10,7 +10,8 @@ export async function buildInvoicePdfBlob(
 }
 
 export function pdfFilenameFor(doc: InvoiceViewModel) {
-  return `${(doc.number || "invoice").replace(/[^\w.-]+/g, "_")}.pdf`;
+  const fallback = doc.kind === "quote" ? "quote" : "invoice";
+  return `${(doc.number || fallback).replace(/[^\w.-]+/g, "_")}.pdf`;
 }
 
 export async function downloadInvoicePdf(

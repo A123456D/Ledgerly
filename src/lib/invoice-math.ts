@@ -137,3 +137,44 @@ export function calculateTotals(
     lines: breakdowns,
   };
 }
+
+export type VatAmountKind = "net" | "tax" | "gross";
+
+export interface VatSplit {
+  net: number;
+  tax: number;
+  gross: number;
+}
+
+/** Split an amount into net / VAT / gross using the same rounding as invoices. */
+export function vatSplit(
+  amount: number,
+  rate: number,
+  kind: VatAmountKind,
+): VatSplit {
+  const n = Number.isFinite(amount) ? Math.max(0, amount) : 0;
+  const r = Number.isFinite(rate) ? Math.max(0, rate) : 0;
+
+  if (kind === "net") {
+    const line = calculateLine(
+      { quantity: 1, unitPrice: n, taxRate: r },
+      "exclusive",
+    );
+    return { net: line.net, tax: line.tax, gross: line.gross };
+  }
+
+  if (kind === "gross") {
+    const line = calculateLine(
+      { quantity: 1, unitPrice: n, taxRate: r },
+      "inclusive",
+    );
+    return { net: line.net, tax: line.tax, gross: line.gross };
+  }
+
+  if (r === 0) {
+    return { net: 0, tax: 0, gross: 0 };
+  }
+  const tax = roundMoney(n);
+  const net = roundMoney((tax * 100) / r);
+  return { net, tax, gross: roundMoney(net + tax) };
+}

@@ -3,6 +3,12 @@
 import { buildInvoicePdfBlob, downloadPdfBlob, pdfFilenameFor } from "@/lib/pdf/download";
 import { formatMoney } from "@/lib/format";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
+import {
+  amountDueLabel,
+  documentNoun,
+  dueDateLabel,
+  isQuote,
+} from "@/lib/document-kind";
 
 export type SendMethod = "email-api" | "mailto" | "download";
 
@@ -25,19 +31,24 @@ export function defaultSendCopy(doc: InvoiceViewModel, fromName?: string) {
   const total = formatMoney(doc.totals.total, doc.currency);
   const showDue =
     doc.visibility?.dueDate !== false && Boolean(doc.dueDate);
+  const noun = documentNoun(doc.kind);
+  const nounLower = noun.toLowerCase();
+  const quote = isQuote(doc.kind);
   return {
     to: doc.client.email || "",
-    subject: `Invoice ${doc.number || ""} from ${who}`.trim(),
+    subject: `${noun} ${doc.number || ""} from ${who}`.trim(),
     message: [
       `Hi${doc.client.name ? ` ${doc.client.name.split(" ")[0]}` : ""},`,
       "",
-      `Please find invoice ${doc.number || ""} attached.`,
-      `Amount due: ${total}`,
-      showDue ? `Due date: ${doc.dueDate}` : null,
+      `Please find ${nounLower} ${doc.number || ""} attached.`,
+      `${amountDueLabel(doc.kind)}: ${total}`,
+      showDue ? `${dueDateLabel(doc.kind)}: ${doc.dueDate}` : null,
       "",
-      doc.visibility?.payment !== false && doc.paymentInstructions
+      !quote && doc.visibility?.payment !== false && doc.paymentInstructions
         ? `Payment details:\n${doc.paymentInstructions}`
-        : null,
+        : quote && doc.visibility?.payment !== false && doc.paymentInstructions
+          ? doc.paymentInstructions
+          : null,
       "",
       "Thank you,",
       who,

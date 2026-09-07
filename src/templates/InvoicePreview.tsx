@@ -7,6 +7,7 @@ import {
 } from "react";
 import type {
   CustomTemplate,
+  DocKind,
   FontPair,
   InvoiceDecoration,
   InvoiceTotals,
@@ -27,6 +28,12 @@ import {
   isLogoDecoration,
 } from "@/lib/decorations/logo-decoration";
 import {
+  amountDueLabel,
+  documentNoun,
+  mapDuePrefix,
+  mapIssuePrefix,
+} from "@/lib/document-kind";
+import {
   EditableSection,
   SectionAccentsCtx,
   useSectionAccent,
@@ -38,6 +45,7 @@ const FontPairCtx = createContext<FontPair>("editorial");
 const LogoSizeCtx = createContext(DEFAULT_LOGO_SIZE_PX);
 
 export interface InvoiceViewModel {
+  kind?: DocKind;
   number: string;
   business: PartySnapshot & {
     phone?: string;
@@ -73,6 +81,10 @@ function show(doc: InvoiceViewModel, field: Parameters<typeof isVisible>[1]) {
   return isVisible(doc.visibility, field);
 }
 
+function sheetTitle(doc: InvoiceViewModel) {
+  return documentNoun(doc.kind);
+}
+
 /** Issue / due lines — omitted when hidden or empty. */
 function DateMeta({
   doc,
@@ -97,11 +109,11 @@ function DateMeta({
 }) {
   const issue =
     show(doc, "issueDate") && doc.issueDate
-      ? `${issuePrefix}${formatDate(doc.issueDate)}`
+      ? `${mapIssuePrefix(doc.kind, issuePrefix)}${formatDate(doc.issueDate)}`
       : null;
   const due =
     show(doc, "dueDate") && doc.dueDate
-      ? `${duePrefix}${formatDate(doc.dueDate)}`
+      ? `${mapDuePrefix(doc.kind, duePrefix)}${formatDate(doc.dueDate)}`
       : null;
   if (!issue && !due) return null;
   const body = stacked ? (
@@ -471,7 +483,7 @@ function DueCard({
         <p
           className={`text-[10px] font-bold uppercase tracking-[0.2em] ${invert ? "opacity-50" : "text-white/80"}`}
         >
-          Amount due
+          {amountDueLabel(doc.kind)}
         </p>
         <p className="mt-1 text-[1.65rem] font-bold tabular-nums tracking-tight">
           {formatMoney(doc.totals.total, doc.currency)}
@@ -595,7 +607,7 @@ function Classic({ doc, accent, logo }: Ctx) {
             className="font-[family-name:var(--font-display)] text-4xl font-semibold tracking-tight"
             style={{ color: accent }}
           >
-            Invoice
+            {sheetTitle(doc)}
           </p>
           <ReferenceBlock
             doc={doc}
@@ -642,7 +654,7 @@ function Minimal({ doc, accent, logo }: Ctx) {
           </p>
         </div>
         <EditableSection section="reference" accent={accent} className="text-right" tint={false}>
-          <p className="text-[11px] uppercase tracking-[0.4em] text-neutral-400">Invoice</p>
+          <p className="text-[11px] uppercase tracking-[0.4em] text-neutral-400">{sheetTitle(doc)}</p>
           <p className="mt-3 text-3xl font-light tracking-tight">{doc.number}</p>
         </EditableSection>
       </EditableSection>
@@ -671,7 +683,7 @@ function Minimal({ doc, accent, logo }: Ctx) {
         className="ml-auto mt-8 w-60 border border-neutral-900 p-4"
       >
         <div data-invoice-avoid-break>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Amount due</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">{amountDueLabel(doc.kind)}</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
             {formatMoney(doc.totals.total, doc.currency)}
           </p>
@@ -707,7 +719,7 @@ function Bold({ doc, accent, logo }: Ctx) {
             </Gate>
           </div>
           <EditableSection section="reference" accent={accent} tint={false} className="relative">
-            <Label className="text-white/60">Invoice</Label>
+            <Label className="text-white/60">{sheetTitle(doc)}</Label>
             <p className="mt-2 text-2xl font-bold tabular-nums">{doc.number}</p>
             <DateMeta doc={doc} accent={accent} stacked className="mt-3 text-sm text-white/70" />
           </EditableSection>
@@ -743,7 +755,7 @@ function Atelier({ doc, accent, logo }: Ctx) {
         <EditableSection section="reference" accent={accent} className="mx-auto mt-5 flex items-center justify-center gap-3" tint={false}>
           <span className="h-px w-12 bg-current" style={{ color: accent }} />
           <span className="text-[11px] uppercase tracking-[0.35em]" style={{ color: accent }}>
-            Invoice {doc.number}
+            {sheetTitle(doc)} {doc.number}
           </span>
           <span className="h-px w-12 bg-current" style={{ color: accent }} />
         </EditableSection>
@@ -787,7 +799,7 @@ function Nordic({ doc, accent, logo }: Ctx) {
             tint={false}
             className="rounded-lg bg-white/15 px-4 py-2 text-right backdrop-blur"
           >
-            <p className="text-[10px] uppercase tracking-[0.24em] text-white/70">Invoice</p>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-white/70">{sheetTitle(doc)}</p>
             <p className="font-semibold tabular-nums">{doc.number}</p>
           </EditableSection>
         </div>
@@ -840,7 +852,7 @@ function Midnight({ doc, accent, logo }: Ctx) {
           tint={false}
           className="rounded-3xl border border-white/10 bg-white/5 px-5 py-4 text-right backdrop-blur-md"
         >
-          <Label className="text-white/45">Invoice</Label>
+          <Label className="text-white/45">{sheetTitle(doc)}</Label>
           <p className="mt-2 text-xl font-semibold tabular-nums" style={{ color: accent }}>
             {doc.number}
           </p>
@@ -950,7 +962,7 @@ function Slate({ doc, accent, logo }: Ctx) {
               className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-right"
             >
               <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-slate-500">
-                Invoice
+                {sheetTitle(doc)}
               </p>
               <p className="mt-1 font-[family-name:var(--font-mono)] text-lg font-semibold">
                 {doc.number}
@@ -1038,7 +1050,7 @@ function Meadow({ doc, accent, logo }: Ctx) {
           </div>
         </div>
         <EditableSection section="reference" accent={accent} className="text-right">
-          <Label className="opacity-45">Invoice</Label>
+          <Label className="opacity-45">{sheetTitle(doc)}</Label>
           <p className="mt-1 text-xl font-semibold" style={{ color: accent }}>
             {doc.number}
           </p>
@@ -1088,7 +1100,7 @@ function Ink({ doc, accent, logo }: Ctx) {
             </h1>
           </div>
           <EditableSection section="reference" accent={accent} className="text-right">
-            <p className="text-5xl font-black tracking-tighter">INVOICE</p>
+            <p className="text-5xl font-black tracking-tighter">{sheetTitle(doc).toUpperCase()}</p>
             <p className="mt-2 font-[family-name:var(--font-mono)] text-sm">{doc.number}</p>
             <DateMeta
               doc={doc}
@@ -1148,7 +1160,7 @@ function Studio({ doc, accent, logo }: Ctx) {
             tint={false}
             className="rounded-2xl bg-white/20 px-4 py-3 text-right backdrop-blur"
           >
-            <p className="text-[10px] uppercase tracking-[0.24em] text-white/80">Invoice</p>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-white/80">{sheetTitle(doc)}</p>
             <p className="mt-1 text-lg font-bold tabular-nums">{doc.number}</p>
           </EditableSection>
         </div>
@@ -1208,7 +1220,7 @@ function Harbor({ doc, accent, logo }: Ctx) {
             </div>
           </div>
           <EditableSection section="reference" accent={accent} tint={false} className="text-right">
-            <p className="text-[10px] uppercase tracking-[0.3em] text-white/55">Invoice</p>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-white/55">{sheetTitle(doc)}</p>
             <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: brass }}>
               {doc.number}
             </p>

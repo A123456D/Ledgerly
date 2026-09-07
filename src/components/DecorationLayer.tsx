@@ -238,7 +238,7 @@ function DecorationItem({
         top: `${decoration.y}%`,
         width: `${decoration.w}%`,
         height: `${decoration.h}%`,
-        transform: `rotate(${decoration.rotation}deg)`,
+        transform: `translate3d(0, 0, 0) rotate(${decoration.rotation}deg)`,
         transformOrigin: "center center",
         zIndex: selected && edit?.editable ? 9998 : decoration.zIndex,
         filter: decoration.blur ? `blur(${decoration.blur}px)` : undefined,

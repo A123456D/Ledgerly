@@ -54,7 +54,7 @@ export function InstallAppButton() {
     if (isIosSafari()) setShowIosHint(true);
 
     try {
-      if (sessionStorage.getItem("ledgerly-ios-install-dismissed") === "1") {
+      if (sessionStorage.getItem("easyledger-ios-install-dismissed") === "1") {
         setDismissedIos(true);
       }
     } catch {
@@ -79,7 +79,7 @@ export function InstallAppButton() {
   function dismissIos() {
     setDismissedIos(true);
     try {
-      sessionStorage.setItem("ledgerly-ios-install-dismissed", "1");
+      sessionStorage.setItem("easyledger-ios-install-dismissed", "1");
     } catch {
       /* ignore */
     }
@@ -101,7 +101,7 @@ export function InstallAppButton() {
     return (
       <button
         type="button"
-        className="max-w-[9.5rem] rounded-md border border-[var(--line)] bg-[var(--wash)] px-2 py-1 text-left text-[10px] leading-snug text-[var(--muted)] sm:max-w-[14rem] sm:text-[11px]"
+        className="max-w-[min(9.5rem,42vw)] rounded-md border border-[var(--line)] bg-[var(--wash)] px-2 py-1 text-left text-[10px] leading-snug text-[var(--muted)] sm:max-w-[14rem] sm:text-[11px]"
         onClick={dismissIos}
         title="Share → Add to Home Screen"
       >

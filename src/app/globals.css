@@ -19,6 +19,12 @@
   --font-mono: var(--font-mono);
 }
 
+html {
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   background:
     radial-gradient(1200px 600px at 10% -10%, rgba(15, 118, 110, 0.12), transparent 55%),
@@ -27,7 +33,21 @@ body {
   color: var(--ink);
   font-family: var(--font-body), system-ui, sans-serif;
   min-height: 100%;
-  overflow-x: hidden;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
 }
 
 /* Soft horizontal scroll without visible scrollbar chrome on mobile nav */
@@ -46,9 +66,16 @@ body {
   min-height: 297mm;
   padding: 14mm 14mm 16mm;
   overflow: hidden;
+  isolation: isolate;
   box-shadow:
     0 1px 2px rgba(20, 32, 28, 0.06),
     0 18px 40px rgba(20, 32, 28, 0.12);
+}
+
+/* Promote the scaled A4 preview to a compositor layer (desktop + mobile). */
+.invoice-gpu-layer {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .invoice-sheet-bleed {

@@ -1,4 +1,4 @@
-# Ledgerly
+# EasyLedger
 
 Freelancer invoice maker focused on **design**, **speed**, and **compliance**.
 
@@ -24,7 +24,7 @@ On any invoice, click **Send**. The app builds the PDF and:
 ```bash
 # optional — one-click email from the server
 RESEND_API_KEY=re_xxx
-RESEND_FROM_EMAIL="Ledgerly <billing@yourdomain.com>"
+RESEND_FROM_EMAIL="EasyLedger <billing@yourdomain.com>"
 ```
 
 ```bash
@@ -36,7 +36,8 @@ npm run build
 
 1. **Settings** — business name, VAT/tax ID, currency, tax mode, prefix, logo, accent
 2. **Clients** / **Catalog** — reuse bill-to and line presets
-3. **New invoice** — live preview (Classic / Minimal / Bold) → **Issue** → **Download PDF**
+3. **Quotes** — send a quote, then convert it to an invoice
+4. **New invoice** — live preview → **Issue** → **Download PDF**
 
 Drafts never consume invoice numbers. Voiding does not reuse a number. Issued invoices freeze a snapshot so later brand edits do not rewrite history.
 

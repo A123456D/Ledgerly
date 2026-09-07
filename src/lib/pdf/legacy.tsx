@@ -5,6 +5,7 @@ import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { formatDate, formatMoney } from "@/lib/format";
 import { resolveVisibility } from "@/lib/invoice-visibility";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "@/lib/templates/catalog";
+import { documentNoun } from "@/lib/document-kind";
 
 function lineAmount(doc: InvoiceViewModel, index: number): number {
   const line = doc.lineItems[index];
@@ -170,9 +171,9 @@ export async function buildInvoicePdfBlobLegacy(
                 )
               : null,
             issueDate
-              ? createElement(Text, { style: { marginTop: 6 } }, `Issued ${issueDate}`)
+              ? createElement(Text, { style: { marginTop: 6 } }, `${doc.kind === "quote" ? "Quoted" : "Issued"} ${issueDate}`)
               : null,
-            dueDate ? createElement(Text, null, `Due ${dueDate}`) : null,
+            dueDate ? createElement(Text, null, `${doc.kind === "quote" ? "Valid until" : "Due"} ${dueDate}`) : null,
           ),
         )
       : isBold || isDark
@@ -207,7 +208,7 @@ export async function buildInvoicePdfBlobLegacy(
                 createElement(
                   Text,
                   { style: { ...styles.h1, color: "#fff" } },
-                  doc.business.name || "Invoice",
+                  doc.business.name || documentNoun(doc.kind),
                 ),
               ),
               createElement(
@@ -216,7 +217,7 @@ export async function buildInvoicePdfBlobLegacy(
                 createElement(
                   Text,
                   { style: { color: "#ffffffcc", fontSize: 9 } },
-                  "INVOICE",
+                  documentNoun(doc.kind).toUpperCase(),
                 ),
                 createElement(
                   Text,
@@ -282,7 +283,7 @@ export async function buildInvoicePdfBlobLegacy(
                     fontFamily: "Helvetica-Bold",
                   },
                 },
-                "Invoice",
+                documentNoun(doc.kind),
               ),
               number
                 ? createElement(
@@ -302,16 +303,16 @@ export async function buildInvoicePdfBlobLegacy(
                 ? createElement(
                     Text,
                     { style: { marginTop: 10 } },
-                    `Issued ${issueDate}`,
+                    `${doc.kind === "quote" ? "Quoted" : "Issued"} ${issueDate}`,
                   )
                 : null,
-              dueDate ? createElement(Text, null, `Due ${dueDate}`) : null,
+              dueDate ? createElement(Text, null, `${doc.kind === "quote" ? "Valid until" : "Due"} ${dueDate}`) : null,
             ),
           );
 
   const documentTree = createElement(
     Document,
-    { title: `Invoice ${doc.number}`, author: doc.business.name },
+    { title: `${documentNoun(doc.kind)} ${doc.number}`, author: doc.business.name },
     createElement(
       Page,
       { size: "A4", style: styles.page },

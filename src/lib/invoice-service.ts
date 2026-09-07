@@ -8,13 +8,16 @@ import {
   type Business,
   type Client,
   type CustomTemplate,
+  type DocKind,
   type Invoice,
+  type InvoiceStatus,
   type InvoiceTotals,
   type IssuedSnapshot,
   type LineItem,
   type PartySnapshot,
   type TemplateId,
 } from "./types";
+import { documentKind, isQuote } from "./document-kind";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "./templates/catalog";
 import {
@@ -150,6 +153,8 @@ export function recomputeTotals(invoice: Invoice): InvoiceTotals {
 export async function createDraftInvoice(options?: {
   clientId?: string;
   fromInvoiceId?: string;
+  kind?: DocKind;
+  sourceQuoteId?: string | null;
 }): Promise<Invoice> {
   const business = normalizeBusinessLogos(await getBusiness());
   const settings = await getSettings();
@@ -171,10 +176,12 @@ export async function createDraftInvoice(options?: {
   let visibility = undefined as Invoice["visibility"];
   let sectionAccents = undefined as Invoice["sectionAccents"];
   let decorations = undefined as Invoice["decorations"];
+  let kind: DocKind = options?.kind ?? "invoice";
 
   if (options?.fromInvoiceId) {
     const source = await db.invoices.get(options.fromInvoiceId);
     if (source) {
+      if (options.kind === undefined) kind = documentKind(source.kind);
       client = { ...source.client };
       clientId = source.clientId;
       lineItems = source.lineItems.map((l) => ({
@@ -209,9 +216,11 @@ export async function createDraftInvoice(options?: {
   }
 
   const invoice: Invoice = {
-    id: uid("inv"),
+    id: uid(kind === "quote" ? "quo" : "inv"),
+    kind,
     status: "draft",
     number: null,
+    sourceQuoteId: options?.sourceQuoteId ?? null,
     clientId,
     client,
     issueDate,
@@ -255,7 +264,7 @@ export async function saveInvoice(
   invoice: Invoice,
 ): Promise<Invoice & { clientCreated?: boolean }> {
   if (invoice.status !== "draft") {
-    throw new Error("Only draft invoices can be edited");
+    throw new Error("Only drafts can be edited");
   }
   const { invoice: withClient, created } = await ensureClientFromInvoice(invoice);
   const next: Invoice & { clientCreated?: boolean } = {
@@ -269,23 +278,28 @@ export async function saveInvoice(
   return next;
 }
 
-export async function peekDraftNumber(): Promise<string> {
+export async function peekDraftNumber(kind: DocKind = "invoice"): Promise<string> {
   const business = await getBusiness();
   const settings = await getSettings();
   const year = new Date().getFullYear();
+  const quote = isQuote(kind);
   return previewNextNumber(
     {
-      nextSequence: settings.nextSequence,
-      sequenceYear: settings.sequenceYear,
+      nextSequence: quote
+        ? (settings.nextQuoteSequence ?? 1)
+        : settings.nextSequence,
+      sequenceYear: quote
+        ? (settings.quoteSequenceYear ?? year)
+        : settings.sequenceYear,
     },
-    business.invoicePrefix,
+    quote ? business.quotePrefix || "QUO-" : business.invoicePrefix,
     year,
   );
 }
 
 export async function issueInvoice(id: string): Promise<Invoice> {
   const invoice = await db.invoices.get(id);
-  if (!invoice) throw new Error("Invoice not found");
+  if (!invoice) throw new Error("Document not found");
   if (invoice.status !== "draft") {
     throw new Error("Only drafts can be issued");
   }
@@ -300,15 +314,20 @@ export async function issueInvoice(id: string): Promise<Invoice> {
 
   const business = normalizeBusinessLogos(await getBusiness());
   const settings = await getSettings();
+  const quote = isQuote(invoice.kind);
   const year = new Date(
     (linked.issueDate || todayISO()) + "T12:00:00",
   ).getFullYear();
   const { number, nextState } = allocateNumber(
     {
-      nextSequence: settings.nextSequence,
-      sequenceYear: settings.sequenceYear,
+      nextSequence: quote
+        ? (settings.nextQuoteSequence ?? 1)
+        : settings.nextSequence,
+      sequenceYear: quote
+        ? (settings.quoteSequenceYear ?? year)
+        : settings.sequenceYear,
     },
-    business.invoicePrefix,
+    quote ? business.quotePrefix || "QUO-" : business.invoicePrefix,
     year,
   );
 
@@ -365,10 +384,17 @@ export async function issueInvoice(id: string): Promise<Invoice> {
 
   await db.transaction("rw", db.invoices, db.settings, db.clients, async () => {
     await db.invoices.put(issued);
-    await saveSettings({
-      nextSequence: nextState.nextSequence,
-      sequenceYear: nextState.sequenceYear,
-    });
+    await saveSettings(
+      quote
+        ? {
+            nextQuoteSequence: nextState.nextSequence,
+            quoteSequenceYear: nextState.sequenceYear,
+          }
+        : {
+            nextSequence: nextState.nextSequence,
+            sequenceYear: nextState.sequenceYear,
+          },
+    );
   });
 
   void import("@/lib/auto-backup").then(({ createAutoBackup }) =>
@@ -380,15 +406,23 @@ export async function issueInvoice(id: string): Promise<Invoice> {
 
 export async function markInvoiceStatus(
   id: string,
-  status: "paid" | "void" | "issued",
+  status: InvoiceStatus,
 ): Promise<Invoice> {
   const invoice = await db.invoices.get(id);
-  if (!invoice) throw new Error("Invoice not found");
+  if (!invoice) throw new Error("Document not found");
   if (invoice.status === "draft") {
-    throw new Error("Issue the invoice first");
+    throw new Error("Issue the document first");
   }
   if (invoice.status === "void" && status !== "void") {
-    throw new Error("Void invoices cannot be reopened");
+    throw new Error("Void documents cannot be reopened");
+  }
+  if (isQuote(invoice.kind)) {
+    if (status === "paid") {
+      throw new Error("Quotes cannot be marked paid — convert to an invoice");
+    }
+    if (status === "issued" && invoice.status !== "issued") {
+      throw new Error("Quotes cannot return to sent once accepted or declined");
+    }
   }
   const next: Invoice = {
     ...invoice,
@@ -397,6 +431,37 @@ export async function markInvoiceStatus(
   };
   await db.invoices.put(next);
   return next;
+}
+
+export async function convertQuoteToInvoice(quoteId: string): Promise<Invoice> {
+  const quote = await db.invoices.get(quoteId);
+  if (!quote || !isQuote(quote.kind)) {
+    throw new Error("Quote not found");
+  }
+  if (quote.status === "draft") {
+    throw new Error("Send the quote before converting it to an invoice");
+  }
+  if (quote.status === "void" || quote.status === "declined") {
+    throw new Error("This quote cannot be converted");
+  }
+  if (quote.convertedInvoiceId) {
+    const existing = await db.invoices.get(quote.convertedInvoiceId);
+    if (existing) return existing;
+  }
+
+  const invoice = await createDraftInvoice({
+    fromInvoiceId: quote.id,
+    kind: "invoice",
+    sourceQuoteId: quote.id,
+  });
+  const now = new Date().toISOString();
+  await db.invoices.put({
+    ...quote,
+    status: "accepted",
+    convertedInvoiceId: invoice.id,
+    updatedAt: now,
+  });
+  return invoice;
 }
 
 export async function duplicateInvoice(id: string): Promise<Invoice> {
@@ -433,6 +498,7 @@ function customFromSnapshot(snapshot: IssuedSnapshot): CustomTemplate | null {
 export function displayDocument(invoice: Invoice): InvoiceViewModel {
   if (invoice.snapshot) {
     return {
+      kind: documentKind(invoice.kind),
       number: invoice.snapshot.number,
       business: invoice.snapshot.business,
       client: invoice.snapshot.client,
@@ -457,6 +523,7 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
     };
   }
   return {
+    kind: documentKind(invoice.kind),
     number: invoice.number ?? "DRAFT",
     business: {
       name: "",
@@ -494,7 +561,7 @@ export async function displayDocumentLive(
   const business = normalizeBusinessLogos(await getBusiness());
   const peek =
     invoice.status === "draft"
-      ? await peekDraftNumber()
+      ? await peekDraftNumber(documentKind(invoice.kind))
       : (invoice.number ?? "—");
 
   let customTemplate: CustomTemplate | null = null;
@@ -520,6 +587,7 @@ export async function displayDocumentLive(
     customTemplate?.source === "design" ? customTemplate.decorations : undefined;
 
   return {
+    kind: documentKind(invoice.kind),
     number: peek,
     business: businessToParty(business, logoId),
     client: invoice.client,

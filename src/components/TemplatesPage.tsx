@@ -31,7 +31,7 @@ export function TemplatesPage() {
 
       {savedDesigns.length ? (
         <section className="mb-10">
-          <div className="mb-3 flex items-end justify-between gap-3">
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <h2 className="font-[family-name:var(--font-display)] text-xl">
               Your saved designs
             </h2>
@@ -53,7 +53,7 @@ export function TemplatesPage() {
       ) : null}
 
       <section>
-        <div className="mb-3 flex items-end justify-between gap-3">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <h2 className="font-[family-name:var(--font-display)] text-xl">
             Template gallery
           </h2>

@@ -6,7 +6,9 @@ import { useState } from "react";
 import { db } from "@/lib/db";
 import { uid } from "@/lib/format";
 import { createDraftInvoice } from "@/lib/invoice-service";
-import type { Client } from "@/lib/types";
+import { createDraftPayslip } from "@/lib/payslip-service";
+import { documentHref } from "@/lib/document-kind";
+import type { Client, DocKind } from "@/lib/types";
 import { Button, Field, PageHeader, inputClass } from "@/components/ui";
 
 const blank = (): Omit<Client, "id" | "createdAt" | "updatedAt"> => ({
@@ -68,19 +70,24 @@ export function ClientsPage() {
     }
   }
 
-  async function invoiceFor(clientId: string) {
-    const inv = await createDraftInvoice({ clientId });
-    router.push(`/invoice?id=${inv.id}`);
+  async function startDoc(clientId: string, kind: DocKind) {
+    const inv = await createDraftInvoice({ clientId, kind });
+    router.push(documentHref(kind, inv.id));
+  }
+
+  async function startPayslip(clientId: string) {
+    const slip = await createDraftPayslip({ clientId });
+    router.push(`/payslip?id=${slip.id}`);
   }
 
   return (
     <div>
       <PageHeader
         title="Clients"
-        subtitle="Save bill-to details once — reuse them on every invoice."
+        subtitle="Save bill-to details once — reuse them on invoices, quotes, and payslips."
       />
       <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
-        <form onSubmit={onSave} className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <form onSubmit={onSave} className="min-w-0 space-y-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 sm:p-5">
           <h2 className="font-[family-name:var(--font-display)] text-xl">
             {editingId ? "Edit client" : "New client"}
           </h2>
@@ -93,7 +100,7 @@ export function ClientsPage() {
           <Field label="Address">
             <input className={inputClass} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
             <Field label="City">
               <input className={inputClass} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
             </Field>
@@ -110,7 +117,7 @@ export function ClientsPage() {
           <Field label="Notes">
             <textarea className={inputClass} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </Field>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button type="submit">{editingId ? "Update" : "Add client"}</Button>
             {editingId ? (
               <Button
@@ -147,8 +154,18 @@ export function ClientsPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="secondary" onClick={() => invoiceFor(c.id)}>
+                  <Button type="button" variant="secondary" onClick={() => startDoc(c.id, "invoice")}>
                     Invoice
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => startDoc(c.id, "quote")}>
+                    Quote
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void startPayslip(c.id)}
+                  >
+                    Payslip
                   </Button>
                   <Button type="button" variant="ghost" onClick={() => onEdit(c)}>
                     Edit

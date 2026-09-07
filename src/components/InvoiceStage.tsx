@@ -6,8 +6,9 @@ const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 
 /**
- * Fits an A4 invoice sheet into the host width via transform: scale,
- * while reserving the post-scale layout box so nothing clips on the right.
+ * Fits an A4 invoice sheet into the host width via a GPU compositor
+ * transform (translate3d + scale) so Chrome, Safari, and Android paint
+ * the live preview on the GPU — not a Canvas 2D bitmap.
  */
 export function InvoiceStage({
   children,
@@ -65,11 +66,11 @@ export function InvoiceStage({
         <div
           ref={sheetRef}
           data-invoice-stage-scaler="true"
-          className="absolute left-0 top-0 origin-top-left"
+          className="absolute left-0 top-0 origin-top-left invoice-gpu-layer"
           style={{
             width: `${A4_WIDTH_MM}mm`,
             minHeight: `${A4_HEIGHT_MM}mm`,
-            transform: `scale(${scale})`,
+            transform: `translate3d(0, 0, 0) scale(${scale})`,
           }}
         >
           {children}

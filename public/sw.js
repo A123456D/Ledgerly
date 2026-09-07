@@ -1,16 +1,20 @@
-/* Ledgerly service worker — shell caching for installability + offline use */
+/* EasyLedger service worker — shell caching for installability + offline use */
 const BASE = new URL("./", self.registration.scope).pathname.replace(/\/$/, "");
-const CACHE = "ledgerly-v8";
+const CACHE = "easyledger-v1";
 const PRECACHE = [
   `${BASE}/`,
+  `${BASE}/quotes/`,
+  `${BASE}/payslips/`,
   `${BASE}/clients/`,
   `${BASE}/items/`,
+  `${BASE}/calculator/`,
+  `${BASE}/vat/`,
   `${BASE}/templates/`,
   `${BASE}/settings/`,
   `${BASE}/manifest.webmanifest`,
   `${BASE}/icons/icon-192.png`,
   `${BASE}/icons/icon-512.png`,
-  `${BASE}/brand/ledgerly-mark.png`,
+  `${BASE}/brand/issueledger-mark.png`,
 ];
 
 self.addEventListener("install", (event) => {

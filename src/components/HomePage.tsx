@@ -3,39 +3,50 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/format";
 import { createDraftInvoice, deleteDraftInvoice, duplicateInvoice } from "@/lib/invoice-service";
 import { Button, PageHeader, StatusPill } from "@/components/ui";
+import type { DocKind } from "@/lib/types";
+import {
+  documentHref,
+  documentKind,
+  documentNounLower,
+} from "@/lib/document-kind";
 
-export function HomePage() {
+export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
   const router = useRouter();
-  const invoices = useLiveQuery(
+  const allDocs = useLiveQuery(
     () => db.invoices.orderBy("updatedAt").reverse().toArray(),
     [],
   );
+  const documents = useMemo(
+    () => allDocs?.filter((inv) => documentKind(inv.kind) === kind),
+    [allDocs, kind],
+  );
   const business = useLiveQuery(() => db.business.get("default"), []);
   const [busy, setBusy] = useState(false);
+  const nounLower = documentNounLower(kind);
 
   const needsSetup = business && !business.name.trim();
 
   async function onNew() {
     setBusy(true);
     try {
-      const inv = await createDraftInvoice();
-      router.push(`/invoice?id=${inv.id}`);
+      const inv = await createDraftInvoice({ kind });
+      router.push(documentHref(kind, inv.id));
     } finally {
       setBusy(false);
     }
   }
 
   async function onDuplicateLast() {
-    if (!invoices?.length) return;
+    if (!documents?.length) return;
     setBusy(true);
     try {
-      const inv = await duplicateInvoice(invoices[0].id);
-      router.push(`/invoice?id=${inv.id}`);
+      const inv = await duplicateInvoice(documents[0].id);
+      router.push(documentHref(inv.kind, inv.id));
     } finally {
       setBusy(false);
     }
@@ -54,20 +65,24 @@ export function HomePage() {
   return (
     <div className="min-w-0">
       <PageHeader
-        title="Invoices"
-        subtitle="Create, issue, and download branded invoices — data stays on this device."
+        title={kind === "quote" ? "Quotes" : "Invoices"}
+        subtitle={
+          kind === "quote"
+            ? "Send a quote, then convert it to an invoice when the client accepts."
+            : "Create, issue, and download branded invoices — data stays on this device."
+        }
         actions={
           <>
             <Button
               variant="secondary"
               className="flex-1 sm:flex-none"
               onClick={onDuplicateLast}
-              disabled={busy || !invoices?.length}
+              disabled={busy || !documents?.length}
             >
               Duplicate last
             </Button>
             <Button className="flex-1 sm:flex-none" onClick={onNew} disabled={busy}>
-              New invoice
+              New {nounLower}
             </Button>
           </>
         }
@@ -82,25 +97,26 @@ export function HomePage() {
         </div>
       ) : null}
 
-      {!invoices ? (
+      {!documents ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
-      ) : invoices.length === 0 ? (
+      ) : documents.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--panel)]/60 px-4 py-12 text-center sm:px-6 sm:py-16">
           <p className="font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
-            No invoices yet
+            No {kind === "quote" ? "quotes" : "invoices"} yet
           </p>
           <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">
-            Start a draft, pick a template, and issue when you&apos;re ready. Numbers only lock on issue.
+            {kind === "quote"
+              ? "Start a draft quote, send it to lock the number, then convert it to an invoice when accepted."
+              : "Start a draft, pick a template, and issue when you\u2019re ready. Numbers only lock on issue."}
           </p>
           <Button className="mt-6" onClick={onNew} disabled={busy}>
-            Create your first invoice
+            Create your first {nounLower}
           </Button>
         </div>
       ) : (
         <>
-          {/* Mobile cards */}
           <div className="space-y-3 md:hidden">
-            {invoices.map((inv) => (
+            {documents.map((inv) => (
               <div
                 key={inv.id}
                 className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4"
@@ -108,7 +124,7 @@ export function HomePage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <Link
-                      href={`/invoice?id=${inv.id}`}
+                      href={documentHref(inv.kind, inv.id)}
                       className="block truncate font-medium text-[var(--ink)] underline-offset-2 hover:underline"
                     >
                       {inv.number || "Draft"}
@@ -117,7 +133,7 @@ export function HomePage() {
                       {inv.client.name || "No client"}
                     </p>
                   </div>
-                  <StatusPill status={inv.status} />
+                  <StatusPill status={inv.status} kind={inv.kind} />
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2 text-sm">
                   <span className="text-[var(--muted)]">{formatDate(inv.issueDate)}</span>
@@ -140,7 +156,6 @@ export function HomePage() {
             ))}
           </div>
 
-          {/* Desktop table */}
           <div className="hidden overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--panel)] md:block">
             <table className="w-full min-w-[36rem] text-left text-sm">
               <thead className="border-b border-[var(--line)] bg-[var(--wash)] text-xs uppercase tracking-wider text-[var(--muted)]">
@@ -156,14 +171,14 @@ export function HomePage() {
                 </tr>
               </thead>
               <tbody>
-                {invoices.map((inv) => (
+                {documents.map((inv) => (
                   <tr
                     key={inv.id}
                     className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--wash)]/80"
                   >
                     <td className="px-4 py-3">
                       <Link
-                        href={`/invoice?id=${inv.id}`}
+                        href={documentHref(inv.kind, inv.id)}
                         className="font-medium text-[var(--ink)] hover:underline"
                       >
                         {inv.number || "Draft"}
@@ -173,7 +188,7 @@ export function HomePage() {
                       {inv.client.name || "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusPill status={inv.status} />
+                      <StatusPill status={inv.status} kind={inv.kind} />
                     </td>
                     <td className="px-4 py-3 text-[var(--muted)]">
                       {formatDate(inv.issueDate)}

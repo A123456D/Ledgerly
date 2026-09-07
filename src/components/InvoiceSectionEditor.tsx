@@ -4,6 +4,7 @@ import { Button, DecimalInput, Field, inputClass } from "@/components/ui";
 import { sectionMeta } from "@/lib/invoice-sections";
 import { ACCENT_PRESETS } from "@/lib/fonts";
 import { formatMoney } from "@/lib/format";
+import { dueDateLabel, issueDateLabel } from "@/lib/document-kind";
 import type {
   Business,
   Invoice,
@@ -135,7 +136,7 @@ export function InvoiceSectionEditor({
 
   return (
     <div
-      className="fixed bottom-4 left-3 right-3 z-[200] mx-auto max-h-[min(72vh,36rem)] max-w-md overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 shadow-2xl sm:left-auto sm:right-6 sm:mx-0 sm:w-[22rem]"
+      className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-[200] mx-auto max-h-[min(72vh,36rem)] max-w-md overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 shadow-2xl sm:left-auto sm:right-6 sm:mx-0 sm:w-[22rem]"
       role="dialog"
       aria-label={`Edit ${meta?.label ?? section}`}
       onClick={(e) => e.stopPropagation()}
@@ -262,7 +263,7 @@ export function InvoiceSectionEditor({
 
         {section === "dates" ? (
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Issue date">
+            <Field label={issueDateLabel(invoice.kind)}>
               <input
                 className={inputClass}
                 type="date"
@@ -270,7 +271,7 @@ export function InvoiceSectionEditor({
                 onChange={(e) => onUpdateInvoice({ issueDate: e.target.value })}
               />
             </Field>
-            <Field label="Due date">
+            <Field label={dueDateLabel(invoice.kind)}>
               <input
                 className={inputClass}
                 type="date"
@@ -314,7 +315,7 @@ export function InvoiceSectionEditor({
 
         {section === "reference" ? (
           <p className="text-xs text-[var(--muted)]">
-            The reference number is assigned when you issue the invoice. Colour
+            The reference number is assigned when you issue the {invoice.kind === "quote" ? "quote" : "invoice"}. Colour
             above changes this block’s accent.
           </p>
         ) : null}

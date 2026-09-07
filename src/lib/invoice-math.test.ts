@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { calculateLine, calculateTotals, roundMoney } from "./invoice-math";
+import {
+  calculateLine,
+  calculateTotals,
+  roundMoney,
+  vatSplit,
+} from "./invoice-math";
 
 describe("roundMoney", () => {
   it("rounds half up to cents", () => {
@@ -70,5 +75,35 @@ describe("inclusive tax", () => {
     );
     expect(totals.total).toBe(227);
     expect(totals.taxTotal).toBe(roundMoney(21 + (106 - 106 / 1.06)));
+  });
+});
+
+describe("vatSplit", () => {
+  it("adds VAT onto net", () => {
+    expect(vatSplit(100, 15, "net")).toEqual({
+      net: 100,
+      tax: 15,
+      gross: 115,
+    });
+  });
+
+  it("extracts VAT from gross", () => {
+    expect(vatSplit(115, 15, "gross")).toEqual({
+      net: 100,
+      tax: 15,
+      gross: 115,
+    });
+  });
+
+  it("backs out net from VAT", () => {
+    expect(vatSplit(15, 15, "tax")).toEqual({
+      net: 100,
+      tax: 15,
+      gross: 115,
+    });
+  });
+
+  it("treats zero-rate VAT amount as empty", () => {
+    expect(vatSplit(10, 0, "tax")).toEqual({ net: 0, tax: 0, gross: 0 });
   });
 });

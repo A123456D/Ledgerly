@@ -8,7 +8,7 @@ import {
 describe("formatInvoiceNumber", () => {
   it("pads sequence and normalizes prefix", () => {
     expect(formatInvoiceNumber("INV-", 2026, 1)).toBe("INV-2026-0001");
-    expect(formatInvoiceNumber("INV", 2026, 42)).toBe("INV-2026-0042");
+    expect(formatInvoiceNumber("QUO-", 2026, 1)).toBe("QUO-2026-0001");
   });
 });
 

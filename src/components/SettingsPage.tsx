@@ -72,7 +72,7 @@ export function SettingsPage() {
 
   async function onExport() {
     const data = await exportBackup();
-    downloadJson(`ledgerly-backup-${new Date().toISOString().slice(0, 10)}.json`, data);
+    downloadJson(`easyledger-backup-${new Date().toISOString().slice(0, 10)}.json`, data);
   }
 
   async function onImport(file: File | null) {
@@ -132,7 +132,7 @@ export function SettingsPage() {
     const record = list.find((b) => b.id === id);
     if (!record) return;
     downloadJson(
-      `ledgerly-auto-${record.createdAt.slice(0, 10)}.json`,
+      `easyledger-auto-${record.createdAt.slice(0, 10)}.json`,
       record.payload,
     );
   }
@@ -145,7 +145,7 @@ export function SettingsPage() {
       />
 
       <form onSubmit={onSave} className="grid gap-8 lg:grid-cols-2">
-        <section className="space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <section className="space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 sm:p-5">
           <h2 className="font-[family-name:var(--font-display)] text-xl">Business</h2>
           <Field label="Legal / trading name">
             <input className={inputClass} value={form.name} onChange={(e) => patch("name", e.target.value)} required />
@@ -161,7 +161,7 @@ export function SettingsPage() {
           <Field label="Address">
             <input className={inputClass} value={form.address} onChange={(e) => patch("address", e.target.value)} />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="City">
               <input className={inputClass} value={form.city} onChange={(e) => patch("city", e.target.value)} />
             </Field>
@@ -177,13 +177,16 @@ export function SettingsPage() {
           </Field>
         </section>
 
-        <section className="space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
+        <section className="space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 sm:p-5">
           <h2 className="font-[family-name:var(--font-display)] text-xl">Defaults & brand</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Currency" hint="ISO code — ZAR for South African rand">
               <input className={inputClass} value={form.currency} onChange={(e) => patch("currency", e.target.value.toUpperCase())} maxLength={3} />
             </Field>
-            <Field label="Default VAT rate %" hint="Standard SA VAT is 15%">
+            <Field
+              label="Default VAT rate %"
+              hint="Standard SA VAT is 15%. Use Calculator → VAT to add or strip tax."
+            >
               <input className={inputClass} type="number" min={0} step={0.01} value={form.defaultTaxRate} onChange={(e) => patch("defaultTaxRate", Number(e.target.value))} />
             </Field>
             <Field label="VAT mode">
@@ -197,6 +200,12 @@ export function SettingsPage() {
             </Field>
             <Field label="Invoice prefix" hint="Numbers format as PREFIX-YEAR-0001">
               <input className={inputClass} value={form.invoicePrefix} onChange={(e) => patch("invoicePrefix", e.target.value)} />
+            </Field>
+            <Field label="Quote prefix" hint="Quotes use a separate sequence">
+              <input className={inputClass} value={form.quotePrefix || "QUO-"} onChange={(e) => patch("quotePrefix", e.target.value)} />
+            </Field>
+            <Field label="Payslip prefix" hint="Payslips use a separate sequence">
+              <input className={inputClass} value={form.payslipPrefix || "PAY-"} onChange={(e) => patch("payslipPrefix", e.target.value)} />
             </Field>
           </div>
           <BrandLookControls
@@ -249,7 +258,7 @@ export function SettingsPage() {
         </div>
       </form>
 
-      <section className="mt-10 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-5">
+      <section className="mt-10 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 sm:p-5">
         <h2 className="font-[family-name:var(--font-display)] text-xl">Backup</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
           Auto-backups stay on this device (IndexedDB). Export a JSON file for an off-device copy.

@@ -153,14 +153,14 @@ export function SendInvoiceModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 p-[max(0.75rem,env(safe-area-inset-left))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-start sm:p-8"
       role="dialog"
       aria-modal
       aria-label="Send invoice"
       onClick={onClose}
     >
       <form
-        className="relative w-full max-w-lg rounded-2xl bg-[var(--panel)] p-5 shadow-xl sm:p-6"
+        className="relative mt-auto max-h-[min(100dvh-2rem,100%)] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-[var(--panel)] p-4 shadow-xl sm:mt-0 sm:rounded-2xl sm:p-6"
         onClick={(e) => e.stopPropagation()}
         onSubmit={onSubmit}
       >
