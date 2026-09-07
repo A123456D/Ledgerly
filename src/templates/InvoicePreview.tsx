@@ -1,11 +1,18 @@
-import type { CSSProperties, ReactNode } from "react";
-import { createContext, useContext } from "react";
+import {
+  createContext,
+  useContext,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type {
   CustomTemplate,
   FontPair,
+  InvoiceDecoration,
   InvoiceTotals,
   LineItem,
   PartySnapshot,
+  SectionAccents,
   TaxMode,
   TemplateId,
 } from "@/lib/types";
@@ -15,8 +22,18 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "@/lib/templates/catalog";
 import { fontPairCssVars } from "@/lib/fonts";
 import { clampLogoSizePx, DEFAULT_LOGO_SIZE_PX } from "@/lib/logo-size";
+import { DecorationLayer, DecorationMediaContext } from "@/components/DecorationLayer";
+import {
+  isLogoDecoration,
+} from "@/lib/decorations/logo-decoration";
+import {
+  EditableSection,
+  SectionAccentsCtx,
+  useSectionAccent,
+} from "@/components/invoice-edit-context";
 
 const LogoVisibleCtx = createContext(true);
+const InlineLogoCtx = createContext(true);
 const FontPairCtx = createContext<FontPair>("editorial");
 const LogoSizeCtx = createContext(DEFAULT_LOGO_SIZE_PX);
 
@@ -45,8 +62,12 @@ export interface InvoiceViewModel {
   totals: InvoiceTotals;
   status: string;
   visibility?: InvoiceVisibility;
+  sectionAccents?: SectionAccents;
+  decorations?: InvoiceDecoration[];
   customTemplate?: CustomTemplate | null;
 }
+
+const SheetDecorCtx = createContext<InvoiceDecoration[]>([]);
 
 function show(doc: InvoiceViewModel, field: Parameters<typeof isVisible>[1]) {
   return isVisible(doc.visibility, field);
@@ -55,6 +76,7 @@ function show(doc: InvoiceViewModel, field: Parameters<typeof isVisible>[1]) {
 /** Issue / due lines — omitted when hidden or empty. */
 function DateMeta({
   doc,
+  accent,
   className = "",
   issuePrefix = "",
   duePrefix = "Due ",
@@ -64,6 +86,7 @@ function DateMeta({
   dueClassName,
 }: {
   doc: InvoiceViewModel;
+  accent?: string;
   className?: string;
   issuePrefix?: string;
   duePrefix?: string;
@@ -81,15 +104,22 @@ function DateMeta({
       ? `${duePrefix}${formatDate(doc.dueDate)}`
       : null;
   if (!issue && !due) return null;
-  if (stacked) {
-    return (
-      <div className={className}>
-        {issue ? <p className={issueClassName}>{issue}</p> : null}
-        {due ? <p className={dueClassName}>{due}</p> : null}
-      </div>
-    );
-  }
-  return <p className={className}>{[issue, due].filter(Boolean).join(sep)}</p>;
+  const body = stacked ? (
+    <div className={accent ? undefined : className}>
+      {issue ? <p className={issueClassName}>{issue}</p> : null}
+      {due ? <p className={dueClassName}>{due}</p> : null}
+    </div>
+  ) : (
+    <p className={accent ? undefined : className}>
+      {[issue, due].filter(Boolean).join(sep)}
+    </p>
+  );
+  if (!accent) return body;
+  return (
+    <EditableSection section="dates" accent={accent} className={className}>
+      {body}
+    </EditableSection>
+  );
 }
 
 function InvoiceNumber({
@@ -119,10 +149,15 @@ function ReferenceBlock({
   numberClassName?: string;
   labelClassName?: string;
 }) {
+  const refAccent = useSectionAccent("reference", accent);
   if (!show(doc, "invoiceNumber") || !doc.number) return null;
   return (
-    <div className={`text-right ${className}`}>
-      <Label className={labelClassName || "opacity-45"} color={accent}>
+    <EditableSection
+      section="reference"
+      accent={accent}
+      className={`text-right ${className}`}
+    >
+      <Label className={labelClassName || "opacity-45"} color={refAccent}>
         Reference
       </Label>
       <p
@@ -130,7 +165,7 @@ function ReferenceBlock({
       >
         {doc.number}
       </p>
-    </div>
+    </EditableSection>
   );
 }
 
@@ -138,12 +173,21 @@ function Gate({
   doc,
   field,
   children,
+  accent,
 }: {
   doc: InvoiceViewModel;
   field: Parameters<typeof isVisible>[1];
   children: ReactNode;
+  accent?: string;
 }) {
   if (!show(doc, field)) return null;
+  if ((field === "from" || field === "billTo") && accent) {
+    return (
+      <EditableSection section={field} accent={accent}>
+        {children}
+      </EditableSection>
+    );
+  }
   return <>{children}</>;
 }
 
@@ -215,8 +259,9 @@ function Logo({
   wide?: boolean;
 }) {
   const logoVisible = useContext(LogoVisibleCtx);
+  const showInline = useContext(InlineLogoCtx);
   const size = useContext(LogoSizeCtx);
-  if (!logoVisible) return null;
+  if (!logoVisible || !showInline) return null;
   if (!src && !name) return null;
 
   const boxStyle: CSSProperties = wide
@@ -314,16 +359,17 @@ function FancyTable({
   accent: string;
   mode?: "soft" | "solid" | "dark" | "gold" | "lined";
 }) {
+  const tableAccent = useSectionAccent("lineItems", accent);
   const head =
     mode === "solid"
-      ? { background: accent, color: "#fff" }
+      ? { background: tableAccent, color: "#fff" }
       : mode === "dark"
         ? { background: "rgba(255,255,255,0.08)", color: "#e2e8f0" }
         : mode === "gold"
-          ? { background: "transparent", color: accent, borderBottom: `1px solid ${accent}` }
+          ? { background: "transparent", color: tableAccent, borderBottom: `1px solid ${tableAccent}` }
           : mode === "lined"
             ? { background: "transparent", color: "#000", borderBottom: "2px solid #000" }
-            : { background: `${accent}14`, color: "#334155" };
+            : { background: `${tableAccent}14`, color: "#334155" };
 
   const showVat = show(doc, "vat");
   const headers = showVat
@@ -331,6 +377,7 @@ function FancyTable({
     : ["Description", "Qty", "Rate", "Amount"];
 
   return (
+    <EditableSection section="lineItems" accent={accent}>
     <table className="mt-6 w-full table-fixed border-collapse text-[13px]">
       <colgroup>
         <col className="w-auto" />
@@ -384,6 +431,7 @@ function FancyTable({
         ))}
       </tbody>
     </table>
+    </EditableSection>
   );
 }
 
@@ -396,8 +444,9 @@ function DueCard({
   accent: string;
   invert?: boolean;
 }) {
+  const totalsAccent = useSectionAccent("totals", accent);
   return (
-    <div className="ml-auto mt-6 w-[15.5rem] space-y-2 text-[13px]">
+    <EditableSection section="totals" accent={accent} className="ml-auto mt-6 w-[15.5rem] space-y-2 text-[13px]">
       {show(doc, "subtotal") ? (
         <div className={`flex justify-between ${invert ? "text-white/70" : "opacity-65"}`}>
           <span>Subtotal</span>
@@ -417,7 +466,7 @@ function DueCard({
         : null}
       <div
         className={`mt-2 rounded-2xl px-5 py-4 ${invert ? "bg-white text-slate-900" : "text-white"}`}
-        style={invert ? undefined : { background: accent }}
+        style={invert ? undefined : { background: totalsAccent }}
       >
         <p
           className={`text-[10px] font-bold uppercase tracking-[0.2em] ${invert ? "opacity-50" : "text-white/80"}`}
@@ -428,37 +477,38 @@ function DueCard({
           {formatMoney(doc.totals.total, doc.currency)}
         </p>
       </div>
-    </div>
+    </EditableSection>
   );
 }
 
 function Notes({
   doc,
   light,
+  accent = "#0f766e",
 }: {
   doc: InvoiceViewModel;
   light?: boolean;
+  accent?: string;
 }) {
   const notes = show(doc, "notes") ? doc.notes : "";
   const payment = show(doc, "payment") ? doc.paymentInstructions : "";
   if (!notes && !payment) return null;
-  // Keep banking / notes fully readable on PDF & WhatsApp (no heavy fade)
   return (
     <div
       data-invoice-avoid-break
       className={`mt-10 grid gap-6 border-t pt-7 text-[13px] sm:grid-cols-2 ${light ? "border-white/15 text-white/90" : "border-black/10 text-[#1c1917]"}`}
     >
       {notes ? (
-        <div>
+        <EditableSection section="notes" accent={accent}>
           <Label className={light ? "text-white/60" : "text-neutral-500"}>Notes</Label>
           <p className="mt-2 whitespace-pre-wrap leading-relaxed">{notes}</p>
-        </div>
+        </EditableSection>
       ) : null}
       {payment ? (
-        <div>
+        <EditableSection section="payment" accent={accent}>
           <Label className={light ? "text-white/60" : "text-neutral-500"}>Payment</Label>
           <p className="mt-2 whitespace-pre-wrap leading-relaxed">{payment}</p>
-        </div>
+        </EditableSection>
       ) : null}
     </div>
   );
@@ -479,7 +529,7 @@ function InvoiceClosing({
   return (
     <div data-invoice-avoid-break>
       <DueCard doc={doc} accent={accent} invert={invert} />
-      <Notes doc={doc} light={light} />
+      <Notes doc={doc} light={light} accent={accent} />
     </div>
   );
 }
@@ -496,42 +546,42 @@ function Sheet({
   bleed?: boolean;
 }) {
   const fontPair = useContext(FontPairCtx);
+  const decorations = useContext(SheetDecorCtx);
+  const sheetRef = useRef<HTMLElement>(null);
+  // Honour “Behind invoice” for every decoration (logos, uploads, shapes).
+  const back = decorations.filter((d) => d.behind);
+  const front = decorations.filter((d) => !d.behind);
   return (
     <article
+      ref={sheetRef}
       data-invoice-sheet="true"
       className={`invoice-sheet relative ${bleed ? "invoice-sheet-bleed overflow-hidden" : "overflow-visible"} ${className}`}
-      style={{ ...fontPairCssVars(fontPair), ...style }}
+      style={{ ...fontPairCssVars(fontPair), ...style, containerType: "inline-size" }}
     >
-      {children}
+      {back.length > 0 ? (
+        <DecorationLayer decorations={back} sheetRef={sheetRef} behind />
+      ) : null}
+      {/* Content and decorations both stay clickable — never disable sections for shapes. */}
+      <div className="relative z-[1]">{children}</div>
+      {front.length > 0 ? (
+        <DecorationLayer decorations={front} sheetRef={sheetRef} />
+      ) : null}
     </article>
-  );
-}
-
-function Orb({
-  className,
-  color,
-}: {
-  className: string;
-  color: string;
-}) {
-  return (
-    <div
-      className={`pointer-events-none absolute rounded-full ${className}`}
-      style={{ background: color }}
-    />
   );
 }
 
 /* ───────── 14 Canva-grade templates ───────── */
 
-/** Clean Warm — Canva minimal cream + teal due card + corner orb */
+/** Clean Warm — cream sheet, teal accents */
 function Classic({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-[#fffdf9] text-[#1c1917] font-[family-name:var(--font-body)]">
-      <Orb className="-right-16 -top-20 h-56 w-56 opacity-[0.14]" color={accent} />
-      <Orb className="-bottom-24 -left-16 h-48 w-48 opacity-[0.08]" color={accent} />
-      <div className="relative flex min-w-0 items-start justify-between gap-6" data-invoice-avoid-break>
-        <div className="flex min-w-0 flex-1 items-center gap-5">
+      <EditableSection
+        section="header"
+        accent={accent}
+        className="relative flex min-w-0 items-start justify-between gap-6"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-5" data-invoice-avoid-break>
           <Logo src={logo} name={doc.business.name} accent={accent} />
           <div className="min-w-0">
             <h1 className="truncate font-[family-name:var(--font-display)] text-[1.75rem] font-semibold tracking-tight">
@@ -553,17 +603,17 @@ function Classic({ doc, accent, logo }: Ctx) {
             numberClassName="text-sm"
             labelClassName="mt-1 opacity-45"
           />
-          <DateMeta doc={doc} className="mt-3 text-xs opacity-55" />
+          <DateMeta doc={doc} accent={accent} className="mt-3 text-xs opacity-55" />
         </div>
-      </div>
+      </EditableSection>
       <div className="relative mt-10 grid grid-cols-2 gap-4">
-        <Gate doc={doc} field="from">
+        <Gate doc={doc} field="from" accent={accent}>
           <div className="rounded-2xl bg-[#f6f1ea] p-5">
             <Label className="opacity-45">From</Label>
             <Party p={doc.business} phone={doc.business.phone} className="mt-2" />
           </div>
         </Gate>
-        <Gate doc={doc} field="billTo">
+        <Gate doc={doc} field="billTo" accent={accent}>
           <div className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
             <Label className="opacity-45">Bill to</Label>
             <Party p={doc.client} className="mt-2" />
@@ -576,30 +626,34 @@ function Classic({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Swiss White — hairline, massive whitespace, outlined due */
+/** Swiss White — hairline, massive whitespace */
 function Minimal({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-white text-[#111] font-[family-name:var(--font-body)]">
-      <div className="flex items-end justify-between border-b border-neutral-200 pb-10">
+      <EditableSection
+        section="header"
+        accent={accent}
+        className="flex items-end justify-between border-b border-neutral-200 pb-10"
+      >
         <div>
           <Logo src={logo} name={doc.business.name} accent={accent} className="mb-8" rounded="rounded-none" wide />
           <p className="text-[11px] uppercase tracking-[0.4em] text-neutral-400">
             {doc.business.name || "Studio"}
           </p>
         </div>
-        <div className="text-right">
+        <EditableSection section="reference" accent={accent} className="text-right" tint={false}>
           <p className="text-[11px] uppercase tracking-[0.4em] text-neutral-400">Invoice</p>
           <p className="mt-3 text-3xl font-light tracking-tight">{doc.number}</p>
-        </div>
-      </div>
+        </EditableSection>
+      </EditableSection>
       <div className="mt-14 grid grid-cols-3 gap-10 text-[13px]">
-        <Gate doc={doc} field="from">
+        <Gate doc={doc} field="from" accent={accent}>
           <div>
             <Label className="text-neutral-400">From</Label>
             <Party p={doc.business} phone={doc.business.phone} className="mt-4" />
           </div>
         </Gate>
-        <Gate doc={doc} field="billTo">
+        <Gate doc={doc} field="billTo" accent={accent}>
           <div>
             <Label className="text-neutral-400">Bill to</Label>
             <Party p={doc.client} className="mt-4" />
@@ -607,49 +661,64 @@ function Minimal({ doc, accent, logo }: Ctx) {
         </Gate>
         <div className="text-right">
           <Label className="text-neutral-400">Dates</Label>
-          <DateMeta doc={doc} stacked className="mt-4" dueClassName="mt-1 text-neutral-400" />
+          <DateMeta doc={doc} accent={accent} stacked className="mt-4" dueClassName="mt-1 text-neutral-400" />
         </div>
       </div>
       <FancyTable doc={doc} accent={accent} mode="lined" />
-      <div className="ml-auto mt-8 w-60 border border-neutral-900 p-4" data-invoice-avoid-break>
-        <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Amount due</p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums">
-          {formatMoney(doc.totals.total, doc.currency)}
-        </p>
-      </div>
-      <Notes doc={doc} />
+      <EditableSection
+        section="totals"
+        accent={accent}
+        className="ml-auto mt-8 w-60 border border-neutral-900 p-4"
+      >
+        <div data-invoice-avoid-break>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Amount due</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">
+            {formatMoney(doc.totals.total, doc.currency)}
+          </p>
+        </div>
+      </EditableSection>
+      <Notes doc={doc} accent={accent} />
     </Sheet>
   );
 }
 
-/** Color Block — full left color column (very Canva) */
+/** Color Block — left brand column */
 function Bold({ doc, accent, logo }: Ctx) {
   return (
     <Sheet bleed className="bg-white text-[#0f172a] font-[family-name:var(--font-body)]">
       <div className="grid min-h-[297mm] grid-cols-[0.38fr_0.62fr]">
-        <div className="relative flex flex-col justify-between p-8 text-white" style={{ background: accent }}>
-          <Orb className="-left-10 top-24 h-40 w-40 opacity-100" color="rgba(255,255,255,0.12)" />
-          <div>
+        <EditableSection
+          section="header"
+          accent={accent}
+          tint={false}
+          className="relative flex flex-col justify-between p-8 text-white"
+        >
+          <div className="absolute inset-0" style={{ background: accent }} aria-hidden />
+          <div className="relative">
             <Logo src={logo} name={doc.business.name} accent="#fff" invert={!!logo} rounded="rounded-2xl" />
             <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl font-bold leading-tight">
               {doc.business.name || "Studio"}
             </h1>
-            <div className="mt-8">
-              <Label className="text-white/60">From</Label>
-              <Party p={doc.business} phone={doc.business.phone} className="mt-2" light />
-            </div>
+            <Gate doc={doc} field="from" accent={accent}>
+              <div className="mt-8">
+                <Label className="text-white/60">From</Label>
+                <Party p={doc.business} phone={doc.business.phone} className="mt-2" light />
+              </div>
+            </Gate>
           </div>
-          <div>
+          <EditableSection section="reference" accent={accent} tint={false} className="relative">
             <Label className="text-white/60">Invoice</Label>
             <p className="mt-2 text-2xl font-bold tabular-nums">{doc.number}</p>
-            <DateMeta doc={doc} stacked className="mt-3 text-sm text-white/70" />
-          </div>
-        </div>
+            <DateMeta doc={doc} accent={accent} stacked className="mt-3 text-sm text-white/70" />
+          </EditableSection>
+        </EditableSection>
         <div className="invoice-pad flex flex-col">
-          <div>
-            <Label className="opacity-40">Bill to</Label>
-            <Party p={doc.client} className="mt-2 text-base" />
-          </div>
+          <Gate doc={doc} field="billTo" accent={accent}>
+            <div>
+              <Label className="opacity-40">Bill to</Label>
+              <Party p={doc.client} className="mt-2 text-base" />
+            </div>
+          </Gate>
           <FancyTable doc={doc} accent={accent} mode="soft" />
           <div className="mt-auto">
             <InvoiceClosing doc={doc} accent={accent} />
@@ -660,33 +729,35 @@ function Bold({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Serif Editorial — centered crest, ornament rules */
+/** Serif Editorial — centered crest */
 function Atelier({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-[#faf6f0] text-[#2a211c] font-[family-name:var(--font-display)]">
-      <div className="text-center">
+      <EditableSection section="header" accent={accent} className="text-center">
         <LogoFrame className="mx-auto rounded-full ring-1 ring-black/10" style={{ background: `${accent}18` }}>
           <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-full" />
         </LogoFrame>
         <h1 className="mt-5 text-3xl font-semibold tracking-tight">
           {doc.business.name || "Atelier"}
         </h1>
-        <div className="mx-auto mt-5 flex items-center justify-center gap-3" style={{ color: accent }}>
-          <span className="h-px w-12 bg-current" />
-          <span className="text-[11px] uppercase tracking-[0.35em]">Invoice {doc.number}</span>
-          <span className="h-px w-12 bg-current" />
-        </div>
-        <DateMeta doc={doc} className="mt-3 text-sm opacity-55" sep=" — " duePrefix="" />
-      </div>
+        <EditableSection section="reference" accent={accent} className="mx-auto mt-5 flex items-center justify-center gap-3" tint={false}>
+          <span className="h-px w-12 bg-current" style={{ color: accent }} />
+          <span className="text-[11px] uppercase tracking-[0.35em]" style={{ color: accent }}>
+            Invoice {doc.number}
+          </span>
+          <span className="h-px w-12 bg-current" style={{ color: accent }} />
+        </EditableSection>
+        <DateMeta doc={doc} accent={accent} className="mt-3 text-sm opacity-55" sep=" — " duePrefix="" />
+      </EditableSection>
       <div className="mt-12 grid grid-cols-2 gap-12 text-sm">
-        <div>
+        <EditableSection section="from" accent={accent}>
           <Label className="opacity-45">Studio</Label>
           <Party p={doc.business} phone={doc.business.phone} className="mt-3 font-[family-name:var(--font-body)]" />
-        </div>
-        <div className="text-right">
+        </EditableSection>
+        <EditableSection section="billTo" accent={accent} className="text-right">
           <Label className="opacity-45">Client</Label>
           <Party p={doc.client} className="mt-3 font-[family-name:var(--font-body)]" />
-        </div>
+        </EditableSection>
       </div>
       <FancyTable doc={doc} accent={accent} mode="soft" />
       <InvoiceClosing doc={doc} accent={accent} />
@@ -694,37 +765,51 @@ function Atelier({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Corporate Blue — stacked blue bars (Forma energy) */
+/** Corporate Blue — stacked header bars */
 function Nordic({ doc, accent, logo }: Ctx) {
   return (
     <Sheet bleed className="bg-white text-[#0f172a] font-[family-name:var(--font-body)]">
-      <div className="px-10 py-7 text-white" style={{ background: accent }}>
-        <div className="flex items-center justify-between gap-4">
+      <EditableSection
+        section="header"
+        accent={accent}
+        tint={false}
+        className="relative px-10 py-7 text-white"
+      >
+        <div className="absolute inset-0" style={{ background: accent }} aria-hidden />
+        <div className="relative flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Logo src={logo} name={doc.business.name} accent="#fff" invert={!!logo} />
             <h1 className="text-2xl font-bold tracking-tight">{doc.business.name || "Company"}</h1>
           </div>
-          <div className="rounded-lg bg-white/15 px-4 py-2 text-right backdrop-blur">
+          <EditableSection
+            section="reference"
+            accent={accent}
+            tint={false}
+            className="rounded-lg bg-white/15 px-4 py-2 text-right backdrop-blur"
+          >
             <p className="text-[10px] uppercase tracking-[0.24em] text-white/70">Invoice</p>
             <p className="font-semibold tabular-nums">{doc.number}</p>
-          </div>
+          </EditableSection>
         </div>
-      </div>
+      </EditableSection>
       {(show(doc, "issueDate") && doc.issueDate) || (show(doc, "dueDate") && doc.dueDate) ? (
-      <div className="px-10 py-3 text-sm text-white/90" style={{ background: `${accent}cc` }}>
-        <DateMeta doc={doc} issuePrefix="Issued " sep=" · " />
-      </div>
+        <div
+          className="relative px-10 py-3 text-sm text-white/90"
+          style={{ background: `color-mix(in srgb, ${accent} 88%, black)` }}
+        >
+          <DateMeta doc={doc} accent={accent} issuePrefix="Issued " sep=" · " />
+        </div>
       ) : null}
       <div className="invoice-pad">
         <div className="grid grid-cols-2 gap-8">
-          <div>
+          <EditableSection section="billTo" accent={accent}>
             <Label className="text-slate-400">Bill to</Label>
             <Party p={doc.client} className="mt-2" />
-          </div>
-          <div>
+          </EditableSection>
+          <EditableSection section="from" accent={accent}>
             <Label className="text-slate-400">From</Label>
             <Party p={doc.business} phone={doc.business.phone} className="mt-2" />
-          </div>
+          </EditableSection>
         </div>
         <FancyTable doc={doc} accent={accent} mode="soft" />
         <InvoiceClosing doc={doc} accent={accent} />
@@ -733,36 +818,54 @@ function Nordic({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Noir Glow — dark + luminous orbs */
+/** Noir — dark creative */
 function Midnight({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-[#070b16] text-[#e8eefc] font-[family-name:var(--font-body)]">
-      <Orb className="-right-20 -top-24 h-72 w-72 opacity-40 blur-3xl" color={accent} />
-      <Orb className="bottom-10 left-10 h-40 w-40 opacity-20 blur-2xl" color="#22d3ee" />
-      <div className="relative flex items-start justify-between gap-6">
+      <EditableSection
+        section="header"
+        accent={accent}
+        tint={false}
+        className="relative flex items-start justify-between gap-6"
+      >
         <div>
           <Logo src={logo} name={doc.business.name} accent={accent} wide />
           <h1 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-semibold">
             {doc.business.name || "Midnight"}
           </h1>
         </div>
-        <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-4 text-right backdrop-blur-md">
+        <EditableSection
+          section="reference"
+          accent={accent}
+          tint={false}
+          className="rounded-3xl border border-white/10 bg-white/5 px-5 py-4 text-right backdrop-blur-md"
+        >
           <Label className="text-white/45">Invoice</Label>
           <p className="mt-2 text-xl font-semibold tabular-nums" style={{ color: accent }}>
             {doc.number}
           </p>
-          <DateMeta doc={doc} className="mt-3 text-xs text-white/50" duePrefix="" />
-        </div>
-      </div>
+          <DateMeta doc={doc} accent={accent} className="mt-3 text-xs text-white/50" duePrefix="" />
+        </EditableSection>
+      </EditableSection>
       <div className="relative mt-10 grid grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+        <EditableSection
+          section="billTo"
+          accent={accent}
+          tint={false}
+          className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
+        >
           <Label className="text-white/40">Bill to</Label>
           <Party p={doc.client} className="mt-2" light />
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+        </EditableSection>
+        <EditableSection
+          section="from"
+          accent={accent}
+          tint={false}
+          className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
+        >
           <Label className="text-white/40">From</Label>
           <Party p={doc.business} phone={doc.business.phone} className="mt-2" light />
-        </div>
+        </EditableSection>
       </div>
       <FancyTable doc={doc} accent={accent} mode="dark" />
       <InvoiceClosing doc={doc} accent={accent} light />
@@ -770,14 +873,16 @@ function Midnight({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Soft Pastel — peach orbs, pill number, rounded card shell */
+/** Soft Pastel — rounded card */
 function Coral({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-[#fff5f7] text-[#1c1917] font-[family-name:var(--font-display)]">
-      <Orb className="-right-12 top-8 h-44 w-44 opacity-30" color="#fda4af" />
-      <Orb className="left-10 top-40 h-28 w-28 opacity-25" color="#fdba74" />
       <div className="relative overflow-hidden rounded-[28px] bg-white shadow-[0_20px_50px_rgba(225,29,72,0.08)] ring-1 ring-rose-100">
-        <div className="flex items-center justify-between gap-4 px-7 py-6" style={{ background: `linear-gradient(120deg, ${accent}18, #fda4af33)` }}>
+        <EditableSection
+          section="header"
+          accent={accent}
+          className="relative flex items-center justify-between gap-4 px-7 py-6"
+        >
           <div className="flex items-center gap-3">
             <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-2xl" />
             <div>
@@ -785,22 +890,28 @@ function Coral({ doc, accent, logo }: Ctx) {
               <p className="text-xs opacity-50">{doc.business.email}</p>
             </div>
           </div>
-          <div className="rounded-full px-5 py-2.5 text-sm font-bold text-white shadow-sm" style={{ background: accent }}>
+          <EditableSection
+            section="reference"
+            accent={accent}
+            tint={false}
+            className="rounded-full px-5 py-2.5 text-sm font-bold text-white shadow-sm"
+            style={{ background: accent }}
+          >
             {doc.number}
-          </div>
-        </div>
+          </EditableSection>
+        </EditableSection>
         <div className="grid grid-cols-3 gap-4 px-7 py-6 text-sm font-[family-name:var(--font-body)]">
-          <div>
+          <EditableSection section="billTo" accent={accent}>
             <Label className="opacity-40">Bill to</Label>
             <Party p={doc.client} className="mt-2" />
-          </div>
-          <div>
+          </EditableSection>
+          <EditableSection section="from" accent={accent}>
             <Label className="opacity-40">From</Label>
             <Party p={doc.business} phone={doc.business.phone} className="mt-2" />
-          </div>
+          </EditableSection>
           <div>
             <Label className="opacity-40">Dates</Label>
-            <DateMeta doc={doc} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
+            <DateMeta doc={doc} accent={accent} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
           </div>
         </div>
         <div className="px-5 pb-7 font-[family-name:var(--font-body)]">
@@ -812,14 +923,18 @@ function Coral({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Consulting Grid — dark left rail */
+/** Consulting — left accent rail */
 function Slate({ doc, accent, logo }: Ctx) {
   return (
     <Sheet bleed className="bg-white text-[#0f172a] font-[family-name:var(--font-body)]">
-      <div className="grid min-h-[297mm] grid-cols-[72px_1fr]">
-        <div style={{ background: accent }} />
+      <div className="relative grid min-h-[297mm] grid-cols-[72px_1fr]">
+        <div className="relative" style={{ background: accent }} aria-hidden />
         <div className="invoice-pad">
-          <div className="flex items-start justify-between gap-6">
+          <EditableSection
+            section="header"
+            accent={accent}
+            className="flex items-start justify-between gap-6"
+          >
             <div className="flex gap-3">
               <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-md" />
               <div>
@@ -829,27 +944,31 @@ function Slate({ doc, accent, logo }: Ctx) {
                 </p>
               </div>
             </div>
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-right">
+            <EditableSection
+              section="reference"
+              accent={accent}
+              className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-right"
+            >
               <p className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-slate-500">
                 Invoice
               </p>
               <p className="mt-1 font-[family-name:var(--font-mono)] text-lg font-semibold">
                 {doc.number}
               </p>
-            </div>
-          </div>
+            </EditableSection>
+          </EditableSection>
           <div className="mt-8 grid grid-cols-3 gap-6 border-y border-slate-200 py-6">
-            <div>
+            <EditableSection section="billTo" accent={accent}>
               <Label className="text-slate-400">Client</Label>
               <Party p={doc.client} className="mt-2" />
-            </div>
-            <div>
+            </EditableSection>
+            <EditableSection section="from" accent={accent}>
               <Label className="text-slate-400">Supplier</Label>
               <Party p={doc.business} phone={doc.business.phone} className="mt-2" />
-            </div>
+            </EditableSection>
             <div className="font-[family-name:var(--font-mono)] text-xs">
               <Label className="text-slate-400">Terms</Label>
-              <DateMeta doc={doc} stacked className="mt-2" issuePrefix="Issue " />
+              <DateMeta doc={doc} accent={accent} stacked className="mt-2" issuePrefix="Issue " />
             </div>
           </div>
           <FancyTable doc={doc} accent={accent} mode="soft" />
@@ -860,12 +979,12 @@ function Slate({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Black & Gold — luxury Canva bestseller pattern */
+/** Black & Gold */
 function Luxe({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-[#0c0a09] text-[#f5efe6] font-[family-name:var(--font-display)]">
-      <div className="border px-7 py-9" style={{ borderColor: `${accent}55` }}>
-        <div className="text-center">
+      <div className="relative px-7 py-9">
+        <EditableSection section="header" accent={accent} tint={false} className="text-center">
           <LogoFrame className="mx-auto rounded-full" style={{ boxShadow: `0 0 0 1px ${accent}` }}>
             <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-full" />
           </LogoFrame>
@@ -875,21 +994,22 @@ function Luxe({ doc, accent, logo }: Ctx) {
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">
             {doc.business.name || "Maison"}
           </h1>
-          <p className="mt-3 text-sm tabular-nums opacity-70">{doc.number}</p>
-        </div>
-        <div className="mx-auto my-8 h-px w-28" style={{ background: accent }} />
-        <div className="grid grid-cols-2 gap-10 font-[family-name:var(--font-body)] text-sm">
-          <div>
+          <EditableSection section="reference" accent={accent} tint={false}>
+            <p className="mt-3 text-sm tabular-nums opacity-70">{doc.number}</p>
+          </EditableSection>
+        </EditableSection>
+        <div className="mt-10 grid grid-cols-2 gap-10 font-[family-name:var(--font-body)] text-sm">
+          <EditableSection section="billTo" accent={accent} tint={false}>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
               Prepared for
             </p>
             <Party p={doc.client} className="mt-3" light />
-          </div>
+          </EditableSection>
           <div className="text-right">
             <p className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
               Dates
             </p>
-            <DateMeta doc={doc} stacked className="mt-3" dueClassName="opacity-60" />
+            <DateMeta doc={doc} accent={accent} stacked className="mt-3" dueClassName="opacity-60" />
           </div>
         </div>
         <div className="font-[family-name:var(--font-body)]">
@@ -901,16 +1021,15 @@ function Luxe({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Pastel Sage — wellness */
+/** Pastel Sage */
 function Meadow({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-[#eef5ea] text-[#1f2a22] font-[family-name:var(--font-display)]">
-      <div
-        className="absolute inset-x-0 top-0 h-36"
-        style={{ background: `linear-gradient(180deg, ${accent}30, transparent)` }}
-      />
-      <Orb className="right-8 top-24 h-32 w-32 opacity-25" color="#86efac" />
-      <div className="relative flex items-center justify-between gap-4">
+      <EditableSection
+        section="header"
+        accent={accent}
+        className="relative flex items-center justify-between gap-4"
+      >
         <div className="flex items-center gap-3">
           <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-full" />
           <div>
@@ -918,23 +1037,31 @@ function Meadow({ doc, accent, logo }: Ctx) {
             <p className="text-sm opacity-55">{doc.business.email}</p>
           </div>
         </div>
-        <div className="text-right">
+        <EditableSection section="reference" accent={accent} className="text-right">
           <Label className="opacity-45">Invoice</Label>
           <p className="mt-1 text-xl font-semibold" style={{ color: accent }}>
             {doc.number}
           </p>
-        </div>
-      </div>
+        </EditableSection>
+      </EditableSection>
       <div className="relative mt-10 grid grid-cols-2 gap-4 font-[family-name:var(--font-body)]">
-        <div className="rounded-[28px] bg-white/90 p-5 shadow-sm ring-1 ring-black/5">
+        <EditableSection
+          section="billTo"
+          accent={accent}
+          className="rounded-[28px] bg-white/90 p-5 shadow-sm ring-1 ring-black/5"
+        >
           <Label className="opacity-40">Bill to</Label>
           <Party p={doc.client} className="mt-2" />
-        </div>
-        <div className="rounded-[28px] bg-white/55 p-5 ring-1 ring-black/5">
+        </EditableSection>
+        <EditableSection
+          section="from"
+          accent={accent}
+          className="rounded-[28px] bg-white/55 p-5 ring-1 ring-black/5"
+        >
           <Label className="opacity-40">Schedule</Label>
-          <DateMeta doc={doc} stacked className="mt-2 text-sm" issueClassName="font-medium" dueClassName="opacity-60" />
+          <DateMeta doc={doc} accent={accent} stacked className="mt-2 text-sm" issueClassName="font-medium" dueClassName="opacity-60" />
           <Party p={doc.business} phone={doc.business.phone} className="mt-4 text-xs" strong={false} />
-        </div>
+        </EditableSection>
       </div>
       <div className="font-[family-name:var(--font-body)]">
         <FancyTable doc={doc} accent={accent} mode="soft" />
@@ -944,37 +1071,43 @@ function Meadow({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Mono Punch — thick frame, watermark */
+/** Mono Punch */
 function Ink({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-white text-black font-[family-name:var(--font-display)]">
-      <div className="pointer-events-none absolute inset-3 border-[3px] border-black" />
       <div className="relative">
-        <p className="pointer-events-none absolute right-0 top-16 origin-right rotate-90 text-7xl font-black tracking-tighter text-black/[0.04]">
-          INVOICE
-        </p>
-        <div className="flex items-start justify-between gap-6">
+        <EditableSection
+          section="header"
+          accent={accent}
+          className="flex items-start justify-between gap-6"
+        >
           <div>
             <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-none" />
             <h1 className="mt-5 text-3xl font-black uppercase tracking-tight">
               {doc.business.name || "Ink Co"}
             </h1>
           </div>
-          <div className="text-right">
+          <EditableSection section="reference" accent={accent} className="text-right">
             <p className="text-5xl font-black tracking-tighter">INVOICE</p>
             <p className="mt-2 font-[family-name:var(--font-mono)] text-sm">{doc.number}</p>
-            <DateMeta doc={doc} className="mt-4 text-sm font-[family-name:var(--font-body)]" sep=" / " duePrefix="" />
-          </div>
-        </div>
+            <DateMeta
+              doc={doc}
+              accent={accent}
+              className="mt-4 text-sm font-[family-name:var(--font-body)]"
+              sep=" / "
+              duePrefix=""
+            />
+          </EditableSection>
+        </EditableSection>
         <div className="mt-10 grid grid-cols-2 gap-10 border-y-[3px] border-black py-6 font-[family-name:var(--font-body)] text-sm">
-          <div>
+          <EditableSection section="billTo" accent={accent}>
             <Label>Bill to</Label>
             <Party p={doc.client} className="mt-3" />
-          </div>
-          <div>
+          </EditableSection>
+          <EditableSection section="from" accent={accent}>
             <Label>From</Label>
             <Party p={doc.business} phone={doc.business.phone} className="mt-3" />
-          </div>
+          </EditableSection>
         </div>
         <div className="font-[family-name:var(--font-body)]">
           <FancyTable doc={doc} accent={accent} mode="solid" />
@@ -985,18 +1118,23 @@ function Ink({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Gradient Studio — diagonal gradient header */
+/** Gradient Studio */
 function Studio({ doc, accent, logo }: Ctx) {
   return (
     <Sheet bleed className="bg-[#fafaf9] text-[#1c1917] font-[family-name:var(--font-body)]">
-      <div
+      <EditableSection
+        section="header"
+        accent={accent}
+        tint={false}
         className="relative overflow-hidden px-10 pb-14 pt-9 text-white"
-        style={{
-          background: `linear-gradient(135deg, ${accent} 0%, #fb7185 55%, #fbbf24 120%)`,
-          clipPath: "polygon(0 0, 100% 0, 100% 78%, 0 100%)",
-        }}
       >
-        <Orb className="right-10 top-6 h-28 w-28 opacity-100" color="rgba(255,255,255,0.2)" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(135deg, ${accent} 0%, ${accent} 48%, #fb7185 100%)`,
+          }}
+          aria-hidden
+        />
         <div className="relative flex items-start justify-between gap-4">
           <div>
             <Logo src={logo} name={doc.business.name} accent="#fff" invert={!!logo} wide />
@@ -1004,23 +1142,36 @@ function Studio({ doc, accent, logo }: Ctx) {
               {doc.business.name || "Studio"}
             </h1>
           </div>
-          <div className="rounded-2xl bg-white/20 px-4 py-3 text-right backdrop-blur">
+          <EditableSection
+            section="reference"
+            accent={accent}
+            tint={false}
+            className="rounded-2xl bg-white/20 px-4 py-3 text-right backdrop-blur"
+          >
             <p className="text-[10px] uppercase tracking-[0.24em] text-white/80">Invoice</p>
             <p className="mt-1 text-lg font-bold tabular-nums">{doc.number}</p>
-          </div>
+          </EditableSection>
         </div>
-      </div>
+      </EditableSection>
       <div className="invoice-pad -mt-6">
         <div className="grid grid-cols-[1.2fr_0.8fr] gap-6">
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+          <EditableSection
+            section="billTo"
+            accent={accent}
+            className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
+          >
             <Label className="opacity-40">Bill to</Label>
             <Party p={doc.client} className="mt-2" />
-          </div>
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+          </EditableSection>
+          <EditableSection
+            section="from"
+            accent={accent}
+            className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
+          >
             <Label className="opacity-40">Dates</Label>
-            <DateMeta doc={doc} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
+            <DateMeta doc={doc} accent={accent} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
             <Party p={doc.business} phone={doc.business.phone} className="mt-4 text-xs" strong={false} />
-          </div>
+          </EditableSection>
         </div>
         <FancyTable doc={doc} accent={accent} mode="soft" />
         <InvoiceClosing doc={doc} accent={accent} />
@@ -1029,13 +1180,24 @@ function Studio({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Forma Navy — agency system look */
+/** Forma Navy */
 function Harbor({ doc, accent, logo }: Ctx) {
   const brass = "#d4a84b";
   return (
     <Sheet bleed className="bg-[#f4f7fb] text-[#0b1220] font-[family-name:var(--font-body)]">
-      <div className="px-10 py-8 text-white" style={{ background: accent }}>
-        <div className="flex items-center justify-between gap-4">
+      <EditableSection
+        section="header"
+        accent={accent}
+        tint={false}
+        className="relative px-10 py-8 text-white"
+      >
+        <div className="absolute inset-0" style={{ background: accent }} aria-hidden />
+        <div
+          className="absolute bottom-0 left-0 right-0 h-1"
+          style={{ background: brass }}
+          aria-hidden
+        />
+        <div className="relative flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-white/10 p-2">
               <Logo src={logo} name={doc.business.name} accent={brass} invert={!!logo} />
@@ -1045,28 +1207,27 @@ function Harbor({ doc, accent, logo }: Ctx) {
               <p className="text-xs text-white/65">{doc.business.email}</p>
             </div>
           </div>
-          <div className="text-right">
+          <EditableSection section="reference" accent={accent} tint={false} className="text-right">
             <p className="text-[10px] uppercase tracking-[0.3em] text-white/55">Invoice</p>
             <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: brass }}>
               {doc.number}
             </p>
-          </div>
+          </EditableSection>
         </div>
-        <div className="mt-6 h-1 w-24 rounded-full" style={{ background: brass }} />
-      </div>
+      </EditableSection>
       <div className="invoice-pad">
         <div className="grid grid-cols-3 gap-6">
-          <div>
+          <EditableSection section="billTo" accent={accent}>
             <Label className="text-slate-400">Bill to</Label>
             <Party p={doc.client} className="mt-2" />
-          </div>
-          <div>
+          </EditableSection>
+          <EditableSection section="from" accent={accent}>
             <Label className="text-slate-400">From</Label>
             <Party p={doc.business} phone={doc.business.phone} className="mt-2" />
-          </div>
+          </EditableSection>
           <div>
             <Label className="text-slate-400">Schedule</Label>
-            <DateMeta doc={doc} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
+            <DateMeta doc={doc} accent={accent} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
           </div>
         </div>
         <FancyTable doc={doc} accent={accent} mode="soft" />
@@ -1076,41 +1237,57 @@ function Harbor({ doc, accent, logo }: Ctx) {
   );
 }
 
-/** Heritage Statement — double rule parchment */
+/** Heritage parchment */
 function Parchment({ doc, accent, logo }: Ctx) {
   return (
     <Sheet className="bg-[#f2e6d0] text-[#3f2a1d] font-[family-name:var(--font-display)]">
-      <div className="pointer-events-none absolute inset-3 border border-[#7c2d12]/45" />
-      <div className="pointer-events-none absolute inset-[18px] border border-[#7c2d12]/25" />
-      <div className="relative">
-        <div className="flex items-start justify-between gap-6">
-          <div className="flex gap-3">
-            <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-sm" />
-            <div>
-              <h1 className="text-2xl font-semibold">{doc.business.name || "Parchment"}</h1>
-              <Party
-                p={doc.business}
-                phone={doc.business.phone}
-                className="mt-2 font-[family-name:var(--font-body)] text-xs"
-                strong={false}
-              />
+      <div className="relative rounded-sm border border-[#7c2d12]/25 bg-[#fff8ea]/40 p-1">
+        <div className="rounded-sm border border-[#7c2d12]/20 p-6 sm:p-8">
+          <EditableSection
+            section="header"
+            accent={accent}
+            className="flex items-start justify-between gap-6"
+          >
+            <div className="flex gap-3">
+              <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-sm" />
+              <div>
+                <h1 className="text-2xl font-semibold">{doc.business.name || "Parchment"}</h1>
+                <Party
+                  p={doc.business}
+                  phone={doc.business.phone}
+                  className="mt-2 font-[family-name:var(--font-body)] text-xs"
+                  strong={false}
+                />
+              </div>
             </div>
+            <EditableSection section="reference" accent={accent} className="text-right">
+              <p className="text-sm uppercase tracking-[0.28em]" style={{ color: accent }}>
+                Statement of account
+              </p>
+              <p className="mt-2 text-lg font-semibold tabular-nums">{doc.number}</p>
+              <DateMeta
+                doc={doc}
+                accent={accent}
+                stacked
+                className="mt-4 font-[family-name:var(--font-body)] text-sm"
+                issuePrefix="Dated "
+                duePrefix="Payable by "
+                dueClassName="opacity-70"
+              />
+            </EditableSection>
+          </EditableSection>
+          <EditableSection
+            section="billTo"
+            accent={accent}
+            className="mt-10 border border-[#7c2d12]/30 bg-[#fff8ea]/70 px-5 py-4 font-[family-name:var(--font-body)]"
+          >
+            <Label className="opacity-55">Rendered to</Label>
+            <Party p={doc.client} className="mt-2" />
+          </EditableSection>
+          <div className="font-[family-name:var(--font-body)]">
+            <FancyTable doc={doc} accent={accent} mode="soft" />
+            <InvoiceClosing doc={doc} accent={accent} />
           </div>
-          <div className="text-right">
-            <p className="text-sm uppercase tracking-[0.28em]" style={{ color: accent }}>
-              Statement of account
-            </p>
-            <p className="mt-2 text-lg font-semibold tabular-nums">{doc.number}</p>
-            <DateMeta doc={doc} stacked className="mt-4 font-[family-name:var(--font-body)] text-sm" issuePrefix="Dated " duePrefix="Payable by " dueClassName="opacity-70" />
-          </div>
-        </div>
-        <div className="mt-10 border border-[#7c2d12]/30 bg-[#fff8ea]/70 px-5 py-4 font-[family-name:var(--font-body)]">
-          <Label className="opacity-55">Rendered to</Label>
-          <Party p={doc.client} className="mt-2" />
-        </div>
-        <div className="font-[family-name:var(--font-body)]">
-          <FancyTable doc={doc} accent={accent} mode="soft" />
-          <InvoiceClosing doc={doc} accent={accent} />
         </div>
       </div>
     </Sheet>
@@ -1138,7 +1315,11 @@ function CanvaCopy({ doc, accent, logo }: Ctx & { custom?: CustomTemplate | null
         </div>
       ) : null}
       <div className="invoice-pad bg-white">
-        <div className="mb-4 flex items-start justify-between gap-4">
+        <EditableSection
+          section="header"
+          accent={useAccent}
+          className="mb-4 flex items-start justify-between gap-4"
+        >
           <Logo
             src={logo}
             name={doc.business.name}
@@ -1149,20 +1330,21 @@ function CanvaCopy({ doc, accent, logo }: Ctx & { custom?: CustomTemplate | null
             <ReferenceBlock doc={doc} accent={useAccent} numberClassName="text-lg" />
             <DateMeta
               doc={doc}
+              accent={useAccent}
               stacked
               className="mt-2 text-sm text-neutral-700"
               issuePrefix="Issued "
             />
           </div>
-        </div>
+        </EditableSection>
         <div className="grid grid-cols-2 gap-6 text-sm">
-          <Gate doc={doc} field="from">
+          <Gate doc={doc} field="from" accent={useAccent}>
             <div>
               <Label className="text-neutral-500">From</Label>
               <Party p={doc.business} phone={doc.business.phone} className="mt-1" />
             </div>
           </Gate>
-          <Gate doc={doc} field="billTo">
+          <Gate doc={doc} field="billTo" accent={useAccent}>
             <div>
               <Label className="text-neutral-500">Bill to</Label>
               <Party p={doc.client} className="mt-1" />
@@ -1242,25 +1424,58 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
   const meta = isBuiltinTemplateId(view.templateId)
     ? getBuiltinTemplate(view.templateId)
     : undefined;
-  const accent = view.accentColor || meta?.defaultAccent || "#0f766e";
+  const designCustom =
+    view.customTemplate?.source === "design" ? view.customTemplate : null;
+  const layoutId =
+    designCustom?.baseTemplateId && isBuiltinTemplateId(designCustom.baseTemplateId)
+      ? designCustom.baseTemplateId
+      : view.templateId;
+  const layoutMeta = isBuiltinTemplateId(layoutId)
+    ? getBuiltinTemplate(layoutId)
+    : meta;
+  const accent =
+    view.accentColor || layoutMeta?.defaultAccent || meta?.defaultAccent || "#0f766e";
   const logo = visibility.logo
     ? view.logoDataUrl || view.business.logoDataUrl
     : undefined;
 
-  const tree =
-    view.customTemplate || view.templateId.startsWith("custom:") ? (
-      <CanvaCopy doc={view} accent={accent} logo={logo} />
-    ) : (
-      <>{(RENDERERS[view.templateId] || Classic)({ doc: view, accent, logo })}</>
-    );
+  let decorations = view.decorations ?? [];
+  if (!visibility.logo) {
+    decorations = decorations.filter((d) => !isLogoDecoration(d));
+  }
+
+  const useCanva =
+    Boolean(view.customTemplate?.backgroundDataUrl) &&
+    view.customTemplate?.source !== "design";
+
+  const tree = useCanva ? (
+    <CanvaCopy doc={view} accent={accent} logo={logo} />
+  ) : (
+    <>{(RENDERERS[layoutId] || Classic)({ doc: view, accent, logo })}</>
+  );
 
   return (
     <LogoVisibleCtx.Provider value={visibility.logo}>
-      <FontPairCtx.Provider value={view.fontPair || "editorial"}>
-        <LogoSizeCtx.Provider value={clampLogoSizePx(view.logoSizePx)}>
-          {tree}
-        </LogoSizeCtx.Provider>
-      </FontPairCtx.Provider>
+      {/* Logos are decoration layers only — deleting them must not revive a fixed template logo. */}
+      <InlineLogoCtx.Provider value={false}>
+        <DecorationMediaContext.Provider
+          value={{
+            logoSrc: logo,
+            logoName: view.business.name || "",
+            logoAccent: accent,
+          }}
+        >
+          <FontPairCtx.Provider value={view.fontPair || "editorial"}>
+            <LogoSizeCtx.Provider value={clampLogoSizePx(view.logoSizePx)}>
+              <SectionAccentsCtx.Provider value={view.sectionAccents ?? {}}>
+                <SheetDecorCtx.Provider value={decorations}>
+                  {tree}
+                </SheetDecorCtx.Provider>
+              </SectionAccentsCtx.Provider>
+            </LogoSizeCtx.Provider>
+          </FontPairCtx.Provider>
+        </DecorationMediaContext.Provider>
+      </InlineLogoCtx.Provider>
     </LogoVisibleCtx.Provider>
   );
 }

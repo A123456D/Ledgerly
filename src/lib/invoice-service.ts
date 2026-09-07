@@ -16,7 +16,11 @@ import {
   type TemplateId,
 } from "./types";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
-import { getBuiltinTemplate } from "./templates/catalog";
+import { getBuiltinTemplate, isBuiltinTemplateId } from "./templates/catalog";
+import {
+  buildTemplateDecorations,
+  isBuiltinTemplateIdForDesign,
+} from "./templates/decoration-presets";
 import { resolveLogoDataUrl, normalizeBusinessLogos } from "./logos";
 
 export function emptyLine(taxRate = 0): LineItem {
@@ -165,6 +169,8 @@ export async function createDraftInvoice(options?: {
   let logoId: string | null | undefined = business.defaultLogoId;
   let logoSizePx = business.defaultLogoSizePx;
   let visibility = undefined as Invoice["visibility"];
+  let sectionAccents = undefined as Invoice["sectionAccents"];
+  let decorations = undefined as Invoice["decorations"];
 
   if (options?.fromInvoiceId) {
     const source = await db.invoices.get(options.fromInvoiceId);
@@ -186,6 +192,13 @@ export async function createDraftInvoice(options?: {
       logoId = source.logoId ?? business.defaultLogoId;
       logoSizePx = source.logoSizePx ?? business.defaultLogoSizePx;
       visibility = source.visibility ? { ...source.visibility } : undefined;
+      sectionAccents = source.sectionAccents
+        ? { ...source.sectionAccents }
+        : undefined;
+      decorations = source.decorations?.map((d) => ({
+        ...d,
+        id: uid("deco"),
+      }));
     }
   } else if (options?.clientId) {
     const c = await db.clients.get(options.clientId);
@@ -214,6 +227,8 @@ export async function createDraftInvoice(options?: {
     paymentInstructions,
     lineItems,
     visibility,
+    sectionAccents,
+    decorations,
     totals: {
       subtotal: 0,
       discountTotal: 0,
@@ -225,6 +240,13 @@ export async function createDraftInvoice(options?: {
     updatedAt: now,
   };
   invoice.totals = recomputeTotals(invoice);
+  if (
+    !options?.fromInvoiceId &&
+    isBuiltinTemplateIdForDesign(templateId) &&
+    !decorations?.length
+  ) {
+    invoice.decorations = buildTemplateDecorations(templateId, accentColor);
+  }
   await db.invoices.put(invoice);
   return invoice;
 }
@@ -312,9 +334,12 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     currency: linked.currency,
     taxMode: linked.taxMode,
     templateId: linked.templateId,
-    customBackgroundDataUrl: custom?.backgroundDataUrl,
-    customContentTopMm: custom?.contentTopMm,
-    customContentStyle: custom?.contentStyle,
+    customBackgroundDataUrl:
+      custom?.source !== "design" ? custom?.backgroundDataUrl : undefined,
+    customContentTopMm:
+      custom?.source !== "design" ? custom?.contentTopMm : undefined,
+    customContentStyle:
+      custom?.source !== "design" ? custom?.contentStyle : undefined,
     issueDate: linked.issueDate,
     dueDate: linked.dueDate,
     notes: linked.notes,
@@ -323,6 +348,10 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     totals,
     visibility: linked.visibility ? { ...linked.visibility } : undefined,
     logoSizePx: linked.logoSizePx ?? business.defaultLogoSizePx,
+    sectionAccents: linked.sectionAccents
+      ? { ...linked.sectionAccents }
+      : undefined,
+    decorations: linked.decorations?.map((d) => ({ ...d })),
   };
 
   const issued: Invoice = {
@@ -422,6 +451,8 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
       status: invoice.status,
       visibility: invoice.snapshot.visibility ?? invoice.visibility,
       logoSizePx: invoice.snapshot.logoSizePx ?? invoice.logoSizePx,
+      sectionAccents: invoice.snapshot.sectionAccents ?? invoice.sectionAccents,
+      decorations: invoice.snapshot.decorations ?? invoice.decorations,
       customTemplate: customFromSnapshot(invoice.snapshot),
     };
   }
@@ -451,6 +482,8 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
     totals: invoice.totals,
     status: invoice.status,
     visibility: invoice.visibility,
+    sectionAccents: invoice.sectionAccents,
+    decorations: invoice.decorations,
   };
 }
 
@@ -468,7 +501,9 @@ export async function displayDocumentLive(
   let accent = invoice.accentColor || business.accentColor;
   if (invoice.templateId.startsWith("custom:")) {
     customTemplate = (await getCustomTemplate(invoice.templateId)) ?? null;
-    if (customTemplate) accent = customTemplate.accentColor || accent;
+    if (customTemplate?.source !== "design" && customTemplate) {
+      accent = customTemplate.accentColor || accent;
+    }
   } else {
     const meta = getBuiltinTemplate(invoice.templateId);
     if (meta && (!invoice.accentColor || invoice.accentColor === business.accentColor)) {
@@ -480,6 +515,9 @@ export async function displayDocumentLive(
     invoice.logoId === null
       ? null
       : invoice.logoId ?? business.defaultLogoId ?? null;
+
+  const designDecorations =
+    customTemplate?.source === "design" ? customTemplate.decorations : undefined;
 
   return {
     number: peek,
@@ -501,5 +539,16 @@ export async function displayDocumentLive(
     status: invoice.status,
     visibility: invoice.visibility,
     customTemplate,
+    sectionAccents: invoice.sectionAccents,
+    decorations:
+      invoice.decorations?.length
+        ? invoice.decorations
+        : designDecorations?.length
+          ? designDecorations
+          : isBuiltinTemplateId(invoice.templateId)
+            ? buildTemplateDecorations(invoice.templateId, accent)
+            : customTemplate?.source === "design" && customTemplate.baseTemplateId
+              ? buildTemplateDecorations(customTemplate.baseTemplateId, accent)
+              : undefined,
   };
 }

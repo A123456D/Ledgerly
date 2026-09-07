@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { domToPng } from "modern-screenshot";
 import { jsPDF } from "jspdf";
 import { applySmartPageBreaks } from "@/lib/pdf/page-breaks";
+import { stripSectionEditChrome } from "@/components/invoice-edit-context";
 import {
   InvoicePreview,
   type InvoiceViewModel,
@@ -129,6 +130,7 @@ async function captureLivePreviewSheet(): Promise<Blob | null> {
     await sleep(80);
 
     applySmartPageBreaks(clone, A4_H_PX);
+    stripSectionEditChrome(clone);
     await sleep(40);
 
     const dataUrl = await captureNode(clone);
@@ -183,6 +185,7 @@ async function captureRemountedPreview(doc: InvoiceViewModel): Promise<Blob> {
     sheet.style.minHeight = `${A4_H_PX}px`;
 
     applySmartPageBreaks(sheet, A4_H_PX);
+    stripSectionEditChrome(sheet);
     await sleep(40);
 
     const dataUrl = await captureNode(sheet);

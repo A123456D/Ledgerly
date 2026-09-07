@@ -3,7 +3,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, DecimalInput, Field, StatusPill, inputClass } from "@/components/ui";
 import { formatDate, formatMoney, uid } from "@/lib/format";
 import {
@@ -24,7 +24,15 @@ import { BrandLookControls } from "@/components/BrandLookControls";
 import { LogoLibrary } from "@/components/LogoUploader";
 import { SendInvoiceModal } from "@/components/SendInvoiceModal";
 import { db, getBusiness, saveBusiness } from "@/lib/db";
-import type { FontPair, Invoice, LineItem, TaxMode } from "@/lib/types";
+import type {
+  Business,
+  FontPair,
+  Invoice,
+  InvoiceDecoration,
+  InvoiceSectionId,
+  LineItem,
+  TaxMode,
+} from "@/lib/types";
 import {
   INVOICE_VISIBILITY_OPTIONS,
   resolveVisibility,
@@ -32,7 +40,29 @@ import {
 } from "@/lib/invoice-visibility";
 import { InvoicePreview, type InvoiceViewModel } from "@/templates/InvoicePreview";
 import { InvoiceStage } from "@/components/InvoiceStage";
-import { normalizeBusinessLogos } from "@/lib/logos";
+import { InvoiceEditContext } from "@/components/invoice-edit-context";
+import { InvoiceSectionEditor } from "@/components/InvoiceSectionEditor";
+import { DesignStudio } from "@/components/DesignStudio";
+import {
+  DecorationEditContext,
+} from "@/components/DecorationLayer";
+import { normalizeBusinessLogos, resolveLogoDataUrl } from "@/lib/logos";
+import { isBuiltinTemplateId } from "@/lib/templates/catalog";
+import { getTemplateDesignPackage } from "@/lib/templates/decoration-presets";
+import {
+  createLogoDecoration,
+  defaultLogoDecoration,
+  findLogoDecorations,
+  isImageDecoration,
+  isLogoDecoration,
+  syncLogoDecoration,
+} from "@/lib/decorations/logo-decoration";
+import {
+  designTemplateToInvoicePatch,
+  getCustomTemplate,
+  saveInvoiceDesignTemplate,
+} from "@/lib/custom-templates";
+import { isCustomTemplateId } from "@/lib/types";
 
 export function InvoiceEditor({ id }: { id: string }) {
   const router = useRouter();
@@ -48,6 +78,13 @@ export function InvoiceEditor({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [selectedSection, setSelectedSection] = useState<InvoiceSectionId | null>(
+    null,
+  );
+  const [designMode, setDesignMode] = useState(false);
+  const [selectedDecorationId, setSelectedDecorationId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     if (stored) setInvoice(stored);
@@ -72,6 +109,24 @@ export function InvoiceEditor({ id }: { id: string }) {
     }
   }, [invoice?.status, business?.invoicePrefix]);
 
+  // Must stay above any early return — hooks cannot be conditional.
+  // Preview is refreshed async; overlay live design fields so drag/resize never snaps back.
+  const livePreview = useMemo(() => {
+    if (!preview || !invoice) return preview;
+    return {
+      ...preview,
+      decorations: invoice.decorations?.length
+        ? invoice.decorations
+        : preview.decorations,
+      sectionAccents: invoice.sectionAccents ?? preview.sectionAccents,
+      accentColor: invoice.accentColor || preview.accentColor,
+      fontPair: invoice.fontPair ?? preview.fontPair,
+      templateId: invoice.templateId,
+      logoSizePx: invoice.logoSizePx ?? preview.logoSizePx,
+      visibility: invoice.visibility ?? preview.visibility,
+    };
+  }, [preview, invoice]);
+
   if (!invoice) {
     return <p className="text-sm text-[var(--muted)]">Loading invoice…</p>;
   }
@@ -80,12 +135,29 @@ export function InvoiceEditor({ id }: { id: string }) {
   const vis = resolveVisibility(invoice.visibility);
 
   function toggleFieldVisibility(key: InvoiceVisibleField) {
-    update({
+    const nextVis = !resolveVisibility(invoice!.visibility)[key];
+    const patch: Partial<Invoice> = {
       visibility: {
         ...resolveVisibility(invoice!.visibility),
-        [key]: !resolveVisibility(invoice!.visibility)[key],
+        [key]: nextVis,
       },
-    });
+    };
+    if (key === "logo") {
+      const logoSrc =
+        business &&
+        resolveLogoDataUrl(
+          business,
+          invoice!.logoId === null
+            ? null
+            : invoice!.logoId ?? business.defaultLogoId ?? null,
+        );
+      patch.decorations = syncLogoDecoration(invoice!.decorations, {
+        accent: invoice!.accentColor,
+        logoVisible: nextVis,
+        imageDataUrl: logoSrc,
+      });
+    }
+    update(patch);
   }
 
   function fieldShowCheckbox(key: InvoiceVisibleField) {
@@ -113,6 +185,173 @@ export function InvoiceEditor({ id }: { id: string }) {
       return next;
     });
   }
+
+  function updateDecoration(id: string, patch: Partial<InvoiceDecoration>) {
+    if (locked) return;
+    // Functional update so rapid drag events never use a stale decorations array.
+    setInvoice((inv) => {
+      if (!inv || inv.status !== "draft") return inv;
+      return {
+        ...inv,
+        decorations: (inv.decorations ?? []).map((d) =>
+          d.id === id ? { ...d, ...patch } : d,
+        ),
+      };
+    });
+  }
+
+  function setSectionAccent(section: InvoiceSectionId, color: string) {
+    if (locked || !invoice) return;
+    update({
+      sectionAccents: { ...(invoice.sectionAccents ?? {}), [section]: color },
+    });
+  }
+
+  function clearSectionAccent(section: InvoiceSectionId) {
+    if (locked || !invoice?.sectionAccents) return;
+    const next = { ...invoice.sectionAccents };
+    delete next[section];
+    update({ sectionAccents: Object.keys(next).length ? next : undefined });
+  }
+
+  function patchBusiness(patch: Partial<Business>) {
+    if (locked || !business) return;
+    const next = { ...business, ...patch, updatedAt: new Date().toISOString() };
+    void saveBusiness(next).then(() => {
+      if (invoice) void refreshPreview(invoice);
+    });
+  }
+
+  function scrollToEditAnchor(anchorId: string) {
+    document.getElementById(anchorId)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }
+
+  const editContext = {
+    editable: !locked,
+    selectedSection,
+    onSelectSection: (section: InvoiceSectionId | null) => {
+      setSelectedSection(section);
+      if (section) {
+        setSelectedDecorationId(null);
+        // Keep designMode as-is — never block section/shape clicks.
+      }
+    },
+    globalAccent: invoice.accentColor,
+    sectionAccents: invoice.sectionAccents ?? {},
+  };
+
+  function addDecoration(decoration: InvoiceDecoration) {
+    if (locked || !invoice) return;
+    const patch: Partial<Invoice> = {
+      decorations: [...(invoice.decorations ?? []), decoration],
+    };
+    if (isLogoDecoration(decoration)) {
+      patch.visibility = {
+        ...resolveVisibility(invoice.visibility),
+        logo: true,
+      };
+    }
+    update(patch);
+    setSelectedDecorationId(decoration.id);
+    setDesignMode(true);
+    setSelectedSection(null);
+  }
+
+  function removeDecoration(id: string) {
+    if (locked || !invoice) return;
+    const target = invoice.decorations?.find((d) => d.id === id);
+    const next = (invoice.decorations ?? []).filter((d) => d.id !== id);
+    const patch: Partial<Invoice> = {
+      decorations: next.length ? next : undefined,
+    };
+    // Deleting the last logo must hide it — otherwise the template redraws it inline.
+    if (
+      target &&
+      isLogoDecoration(target) &&
+      !next.some(isLogoDecoration)
+    ) {
+      patch.visibility = {
+        ...resolveVisibility(invoice.visibility),
+        logo: false,
+      };
+    }
+    update(patch);
+    if (selectedDecorationId === id) setSelectedDecorationId(null);
+  }
+
+  function duplicateDecoration(id: string) {
+    if (locked || !invoice) return;
+    const src = invoice.decorations?.find((d) => d.id === id);
+    if (!src) return;
+    const maxZ = (invoice.decorations ?? []).reduce(
+      (m, d) => Math.max(m, d.zIndex),
+      0,
+    );
+    addDecoration({
+      ...src,
+      id: uid("deco"),
+      x: Math.min(92, src.x + 3),
+      y: Math.min(92, src.y + 3),
+      zIndex: maxZ + 1,
+    });
+  }
+
+  function reorderDecoration(
+    id: string,
+    dir: "up" | "down" | "top" | "bottom",
+  ) {
+    if (locked) return;
+    setInvoice((inv) => {
+      if (!inv || inv.status !== "draft") return inv;
+      const list = [...(inv.decorations ?? [])]
+        .map((d) => ({ ...d }))
+        .sort((a, b) => a.zIndex - b.zIndex);
+      const idx = list.findIndex((d) => d.id === id);
+      if (idx < 0) return inv;
+      if (dir === "up") {
+        if (idx >= list.length - 1) return inv;
+        const z = list[idx].zIndex;
+        list[idx].zIndex = list[idx + 1].zIndex;
+        list[idx + 1].zIndex = z;
+        // Same z-index edge case: force a step so order actually changes
+        if (list[idx].zIndex === list[idx + 1].zIndex) {
+          list[idx].zIndex = list[idx + 1].zIndex + 1;
+        }
+      } else if (dir === "down") {
+        if (idx <= 0) return inv;
+        const z = list[idx].zIndex;
+        list[idx].zIndex = list[idx - 1].zIndex;
+        list[idx - 1].zIndex = z;
+        if (list[idx].zIndex === list[idx - 1].zIndex) {
+          list[idx - 1].zIndex = list[idx].zIndex + 1;
+        }
+      } else if (dir === "top") {
+        const maxZ = list.reduce((m, d) => Math.max(m, d.zIndex), 0);
+        list[idx].zIndex = maxZ + 1;
+      } else if (dir === "bottom") {
+        const minZ = list.reduce((m, d) => Math.min(m, d.zIndex), 0);
+        list[idx].zIndex = minZ - 1;
+      }
+      return { ...inv, decorations: list };
+    });
+  }
+
+  const decorationEditContext = {
+    editable: !locked,
+    focusShapes: designMode,
+    selectedId: selectedDecorationId,
+    onSelect: (id: string | null) => {
+      setSelectedDecorationId(id);
+      if (id) {
+        setSelectedSection(null);
+        setDesignMode(true);
+      }
+    },
+    onUpdate: updateDecoration,
+  };
 
   function updateLine(lineId: string, patch: Partial<LineItem>) {
     if (locked || !invoice) return;
@@ -145,10 +384,11 @@ export function InvoiceEditor({ id }: { id: string }) {
       const saved = await saveInvoice(current);
       const { clientCreated, ...stored } = saved;
       setInvoice(stored);
+      const design = await saveInvoiceDesignTemplate(stored);
       setMessage(
         clientCreated
-          ? "Draft saved — client added to your Clients list"
-          : "Draft saved",
+          ? `Draft saved — client added, design “${design.name}” in template gallery`
+          : `Draft saved — design “${design.name}” in template gallery`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -185,6 +425,8 @@ export function InvoiceEditor({ id }: { id: string }) {
     setError("");
     try {
       if (current.status === "draft") await saveInvoice(current);
+      setSelectedSection(null);
+      setSelectedDecorationId(null);
       const latest = (await db.invoices.get(current.id)) || current;
       const doc = await displayDocumentLive(latest);
       // Ensure the live preview is painted before we snapshot it
@@ -352,7 +594,40 @@ export function InvoiceEditor({ id }: { id: string }) {
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
         <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5">
           <fieldset disabled={locked} className="min-w-0 space-y-4 disabled:opacity-70">
-            <div className="grid gap-3 sm:grid-cols-2">
+
+            <div className="rounded-lg border border-[var(--line)] bg-[var(--wash)]/50 p-3 sm:p-4">
+              <p className="mb-3 text-sm font-medium text-[var(--ink)]">
+                Show on invoice
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {INVOICE_VISIBILITY_OPTIONS.map(({ key, label }) => {
+                  const on = vis[key];
+                  return (
+                    <label
+                      key={key}
+                      className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm ${
+                        on
+                          ? "border-teal-700/25 bg-[var(--panel)]"
+                          : "border-[var(--line)] bg-[var(--panel)]/60 opacity-70"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-[var(--line)] accent-[var(--accent)]"
+                        checked={on}
+                        onChange={() => toggleFieldVisibility(key)}
+                      />
+                      <span className={on ? "" : "line-through"}>{label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Uncheck any box to hide that block from the preview and PDF.
+              </p>
+            </div>
+
+            <div id="edit-section-billTo" className="grid gap-3 sm:grid-cols-2">
               <Field label="Client">
                 <select
                   className={inputClass}
@@ -445,7 +720,7 @@ export function InvoiceEditor({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div id="edit-section-dates" className="grid gap-3 sm:grid-cols-4">
               <Field
                 label="Reference number"
                 hint={
@@ -455,6 +730,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                 }
               >
                 <input
+                  id="edit-section-reference"
                   className={`${inputClass} bg-[var(--wash)] tabular-nums`}
                   readOnly
                   value={invoice.number || peekNumber || "—"}
@@ -536,98 +812,7 @@ export function InvoiceEditor({ id }: { id: string }) {
               </Field>
             </div>
 
-            <div className="rounded-lg border border-[var(--line)] bg-[var(--wash)]/50 p-3 sm:p-4">
-              <p className="mb-3 text-sm font-medium text-[var(--ink)]">
-                Show on invoice
-              </p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {INVOICE_VISIBILITY_OPTIONS.map(({ key, label }) => {
-                  const on = vis[key];
-                  return (
-                    <label
-                      key={key}
-                      className={`flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm ${
-                        on
-                          ? "border-teal-700/25 bg-[var(--panel)]"
-                          : "border-[var(--line)] bg-[var(--panel)]/60 opacity-70"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 shrink-0 rounded border-[var(--line)] accent-[var(--accent)]"
-                        checked={on}
-                        onChange={() => toggleFieldVisibility(key)}
-                      />
-                      <span className={on ? "" : "line-through"}>{label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                Uncheck any box to hide that block from the preview and PDF.
-              </p>
-            </div>
-
-            {business ? (
-              <LogoLibrary
-                label="Logos on invoice"
-                business={normalizeBusinessLogos(business)}
-                allowNone
-                selectedLogoId={
-                  invoice.logoId === null
-                    ? null
-                    : invoice.logoId ?? business.defaultLogoId ?? null
-                }
-                onSelectLogo={(logoId) => update({ logoId })}
-                logoSizePx={
-                  invoice.logoSizePx ??
-                  business.defaultLogoSizePx ??
-                  120
-                }
-                onLogoSizeChange={(logoSizePx) => update({ logoSizePx })}
-                onChange={(next) => {
-                  void saveBusiness(next).then(() => {
-                    void refreshPreview({
-                      ...invoice,
-                      logoId:
-                        invoice.logoId === null
-                          ? null
-                          : invoice.logoId ?? next.defaultLogoId ?? null,
-                    });
-                  });
-                }}
-              />
-            ) : null}
-
-            <div>
-              <p className="mb-2 text-sm text-[var(--muted)]">Template</p>
-              <TemplatePicker
-                value={invoice.templateId}
-                onChange={(id) => update({ templateId: id })}
-                onAccentSuggest={(accent) => update({ accentColor: accent })}
-              />
-              <div className="mt-3">
-                <BrandLookControls
-                  accentColor={invoice.accentColor}
-                  fontPair={
-                    (invoice.fontPair as FontPair | undefined) ||
-                    business?.fontPair ||
-                    "editorial"
-                  }
-                  onAccentChange={(accentColor) => update({ accentColor })}
-                  onFontChange={(fontPair) => update({ fontPair })}
-                />
-              </div>
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                Colour and font update the live preview and PDF. Defaults live under{" "}
-                <Link href="/settings" className="underline">
-                  Settings
-                </Link>
-                .
-              </p>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
+            <div id="edit-section-lineItems" className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2.5 sm:px-4">
                 <p className="text-sm font-medium text-[var(--ink)]">Line items</p>
                 <div className="flex flex-wrap gap-2">
@@ -787,6 +972,250 @@ export function InvoiceEditor({ id }: { id: string }) {
               </div>
             </div>
 
+
+            {business ? (
+              <div id="edit-section-logo">
+              <LogoLibrary
+                label="Logos on invoice"
+                business={normalizeBusinessLogos(business)}
+                allowNone
+                selectedLogoId={
+                  invoice.logoId === null
+                    ? null
+                    : invoice.logoId ?? business.defaultLogoId ?? null
+                }
+                onSelectLogo={(logoId) => {
+                  const src = resolveLogoDataUrl(business, logoId);
+                  const patch: Partial<Invoice> = { logoId };
+                  let decorations = [...(invoice.decorations ?? [])];
+                  const logos = findLogoDecorations(decorations);
+
+                  if (logoId === null) {
+                    // Keep logo shapes; clear baked images so monogram shows
+                    decorations = decorations.map((d) =>
+                      isLogoDecoration(d)
+                        ? { ...d, imageDataUrl: undefined }
+                        : d,
+                    );
+                  } else if (selectedDecorationId) {
+                    const selected = decorations.find(
+                      (d) => d.id === selectedDecorationId,
+                    );
+                    if (selected && isLogoDecoration(selected)) {
+                      decorations = decorations.map((d) =>
+                        d.id === selected.id
+                          ? { ...d, imageDataUrl: src }
+                          : d,
+                      );
+                    } else {
+                      const maxZ = decorations.reduce(
+                        (m, d) => Math.max(m, d.zIndex),
+                        0,
+                      );
+                      decorations.push({
+                        id: uid("deco"),
+                        ...defaultLogoDecoration(
+                          invoice.accentColor,
+                          maxZ + 1,
+                          src,
+                        ),
+                      });
+                    }
+                  } else if (logos.length) {
+                    // Apply to selected or first logo without moving it
+                    const targetId = logos[0].id;
+                    decorations = decorations.map((d) =>
+                      d.id === targetId ? { ...d, imageDataUrl: src } : d,
+                    );
+                  } else if (vis.logo) {
+                    decorations.push(
+                      createLogoDecoration(invoice.accentColor, {
+                        imageDataUrl: src,
+                      }),
+                    );
+                  }
+                  patch.decorations = decorations;
+                  update(patch);
+                  setDesignMode(true);
+                }}
+                logoSizePx={
+                  invoice.logoSizePx ??
+                  business.defaultLogoSizePx ??
+                  120
+                }
+                onLogoSizeChange={(logoSizePx) => {
+                  // Resize selected logo shape (or all logos) — free shape sizing
+                  const logos = findLogoDecorations(invoice.decorations);
+                  if (!logos.length) {
+                    update({ logoSizePx });
+                    return;
+                  }
+                  // Map px roughly to % width on A4 (~794px wide at 96dpi)
+                  const pct = Math.min(40, Math.max(6, (logoSizePx / 794) * 100));
+                  const targetId =
+                    selectedDecorationId &&
+                    logos.some((l) => l.id === selectedDecorationId)
+                      ? selectedDecorationId
+                      : logos[0].id;
+                  update({
+                    logoSizePx,
+                    decorations: (invoice.decorations ?? []).map((d) =>
+                      d.id === targetId
+                        ? { ...d, w: pct, h: pct * 0.7 }
+                        : d,
+                    ),
+                  });
+                }}
+                onChange={(next) => {
+                  void saveBusiness(next).then(() => {
+                    void refreshPreview({
+                      ...invoice,
+                      logoId:
+                        invoice.logoId === null
+                          ? null
+                          : invoice.logoId ?? next.defaultLogoId ?? null,
+                    });
+                  });
+                }}
+              />
+              </div>
+            ) : null}
+
+            <div id="edit-section-header">
+              <p className="mb-2 text-sm text-[var(--muted)]">Template</p>
+              <TemplatePicker
+                value={invoice.templateId}
+                onChange={(id) => {
+                  if (isBuiltinTemplateId(id)) {
+                    const design = getTemplateDesignPackage(
+                      id,
+                      invoice.accentColor,
+                    );
+                    const keptLogos = findLogoDecorations(invoice.decorations);
+                    const keptImages = (invoice.decorations ?? []).filter(
+                      (d) => !isLogoDecoration(d) && d.shapeId === "image",
+                    );
+                    const packageShapes = design.decorations.filter(
+                      (d) => !isLogoDecoration(d),
+                    );
+                    const decorations = [
+                      ...packageShapes,
+                      ...(keptLogos.length
+                        ? keptLogos
+                        : vis.logo
+                          ? [
+                              createLogoDecoration(design.accentColor, {
+                                imageDataUrl: business
+                                  ? resolveLogoDataUrl(
+                                      business,
+                                      invoice.logoId === null
+                                        ? null
+                                        : invoice.logoId ??
+                                          business.defaultLogoId ??
+                                          null,
+                                    )
+                                  : undefined,
+                              }),
+                            ]
+                          : []),
+                      ...keptImages,
+                    ];
+                    update({
+                      templateId: id,
+                      accentColor: design.accentColor,
+                      decorations,
+                      sectionAccents: undefined,
+                    });
+                    setSelectedDecorationId(null);
+                    return;
+                  }
+                  if (isCustomTemplateId(id)) {
+                    void getCustomTemplate(id).then((custom) => {
+                      if (!custom) {
+                        update({ templateId: id });
+                        return;
+                      }
+                      const patch = designTemplateToInvoicePatch(custom);
+                      if (patch) {
+                        update(patch);
+                        setSelectedDecorationId(null);
+                        setDesignMode(true);
+                        return;
+                      }
+                      update({
+                        templateId: id,
+                        accentColor: custom.accentColor || invoice.accentColor,
+                      });
+                    });
+                    return;
+                  }
+                  update({ templateId: id });
+                }}
+                onAccentSuggest={(accent) => update({ accentColor: accent })}
+              />
+              <div className="mt-3">
+                <BrandLookControls
+                  accentColor={invoice.accentColor}
+                  fontPair={
+                    (invoice.fontPair as FontPair | undefined) ||
+                    business?.fontPair ||
+                    "editorial"
+                  }
+                  onAccentChange={(accentColor) => update({ accentColor })}
+                  onFontChange={(fontPair) => update({ fontPair })}
+                />
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Templates use clean layouts. Tap sections on the preview to edit content, or use Design
+                studio to upload images and add shapes.
+              </p>
+            </div>
+
+            {!locked ? (
+              <DesignStudio
+                decorations={invoice.decorations ?? []}
+                accentColor={invoice.accentColor}
+                selectedId={selectedDecorationId}
+                designMode={designMode}
+                logoSrc={
+                  business
+                    ? resolveLogoDataUrl(
+                        business,
+                        invoice.logoId === null
+                          ? null
+                          : invoice.logoId ?? business.defaultLogoId ?? null,
+                      )
+                    : undefined
+                }
+                onToggleMode={(on) => {
+                  setDesignMode(on);
+                  if (on) setSelectedSection(null);
+                  else setSelectedDecorationId(null);
+                }}
+                onSelect={setSelectedDecorationId}
+                onAdd={addDecoration}
+                onUpdate={updateDecoration}
+                onRemove={removeDecoration}
+                onDuplicate={duplicateDecoration}
+                onReorder={reorderDecoration}
+                onClearAll={() => {
+                  const logos = findLogoDecorations(invoice.decorations);
+                  const images = (invoice.decorations ?? []).filter(
+                    isImageDecoration,
+                  );
+                  update({
+                    decorations:
+                      logos.length || images.length
+                        ? [...logos, ...images]
+                        : undefined,
+                  });
+                  setSelectedDecorationId(null);
+                }}
+              />
+            ) : null}
+
+
+            <div id="edit-section-notes">
             <Field label="Notes">
               <textarea
                 className={inputClass}
@@ -795,6 +1224,8 @@ export function InvoiceEditor({ id }: { id: string }) {
                 onChange={(e) => update({ notes: e.target.value })}
               />
             </Field>
+            </div>
+            <div id="edit-section-payment">
             <Field label="Payment instructions">
               <textarea
                 className={inputClass}
@@ -805,21 +1236,62 @@ export function InvoiceEditor({ id }: { id: string }) {
                 }
               />
             </Field>
+            </div>
           </fieldset>
         </div>
 
-        <div className="min-w-0 xl:sticky xl:top-20 xl:self-start">
+        <div className="relative min-w-0 xl:sticky xl:top-20 xl:self-start">
           <p className="mb-2 text-xs uppercase tracking-wider text-[var(--muted)]">
             Live A4 preview
           </p>
+          {!locked ? (
+            <p className="mb-2 text-xs text-[var(--muted)]">
+              Tap Amount due, From, Bill to, or line items — colour wheel + edit fields open there.
+            </p>
+          ) : null}
           <div
             data-invoice-preview-root="true"
-            className="min-w-0 max-h-[70vh] overflow-x-auto overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 sm:max-h-none sm:p-5"
+            className="min-w-0 max-h-[min(70vh,calc(100dvh-8rem))] overflow-x-auto overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 pb-8 sm:max-h-[calc(100dvh-7rem)] sm:p-5 sm:pb-10 xl:max-h-[calc(100dvh-6.5rem)]"
+            onClick={(e) => {
+              if (locked) return;
+              const t = e.target as HTMLElement | null;
+              // Clicks on shapes / section chrome handle their own selection.
+              if (
+                t?.closest?.("[data-invoice-decoration]") ||
+                t?.closest?.("[data-invoice-section]")
+              ) {
+                return;
+              }
+              setSelectedSection(null);
+              setSelectedDecorationId(null);
+            }}
           >
-            <InvoiceStage maxScale={1} minScale={0.28}>
-              {preview ? <InvoicePreview doc={preview} /> : null}
-            </InvoiceStage>
+            <DecorationEditContext.Provider value={decorationEditContext}>
+              <InvoiceEditContext.Provider value={editContext}>
+                <InvoiceStage maxScale={1} minScale={0.28}>
+                  {livePreview ? <InvoicePreview doc={livePreview} /> : null}
+                </InvoiceStage>
+              </InvoiceEditContext.Provider>
+            </DecorationEditContext.Provider>
           </div>
+          {selectedSection && !locked ? (
+            <InvoiceSectionEditor
+              section={selectedSection}
+              globalAccent={invoice.accentColor}
+              sectionAccents={invoice.sectionAccents ?? {}}
+              invoice={invoice}
+              business={business ?? null}
+              onSectionAccent={setSectionAccent}
+              onClearSectionAccent={clearSectionAccent}
+              onUpdateInvoice={update}
+              onUpdateBusiness={patchBusiness}
+              onUpdateLine={updateLine}
+              onAddLine={addLine}
+              onRemoveLine={removeLine}
+              onClose={() => setSelectedSection(null)}
+              onScrollToAnchor={scrollToEditAnchor}
+            />
+          ) : null}
         </div>
       </div>
 

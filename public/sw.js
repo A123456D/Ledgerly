@@ -1,6 +1,6 @@
 /* Ledgerly service worker — shell caching for installability + offline use */
 const BASE = new URL("./", self.registration.scope).pathname.replace(/\/$/, "");
-const CACHE = "ledgerly-v5";
+const CACHE = "ledgerly-v8";
 const PRECACHE = [
   `${BASE}/`,
   `${BASE}/clients/`,

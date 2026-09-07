@@ -1,6 +1,6 @@
 /**
  * Build a static Ledgerly export for embedding under the SKITZ Apps catalog.
- * Output: ../skitz-site/website/public/apps/ledgerly/web
+ * Output: ../SHIFTR/website/public/apps/ledgerly/web
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -12,7 +12,7 @@ const basePath = "/apps/ledgerly/web";
 const apiDir = path.join(root, "src", "app", "api");
 const apiPark = path.join(root, "src", "app", "_api_parked_for_export");
 const outDir = path.join(root, "out");
-const dest = path.resolve(root, "..", "skitz-site", "website", "public", "apps", "ledgerly", "web");
+const dest = path.resolve(root, "..", "SHIFTR", "website", "public", "apps", "ledgerly", "web");
 
 function run(cmd, args, env = {}) {
   const r = spawnSync(cmd, args, {

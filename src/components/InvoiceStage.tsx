@@ -36,7 +36,7 @@ export function InvoiceStage({
       const h = Math.max(sheet.offsetHeight, 1);
       const available = host.clientWidth;
       if (available <= 0) return;
-      // 2px slack avoids subpixel overflow clipping in rounded parents
+      // Round up so the scaled sheet isn't clipped by a short layout box
       const next = Math.min(maxScale, Math.max(minScale, (available - 2) / w));
       setNatural({ w, h });
       setScale(next);
@@ -47,10 +47,10 @@ export function InvoiceStage({
     ro.observe(host);
     ro.observe(sheet);
     return () => ro.disconnect();
-  }, [maxScale, minScale]);
+  }, [maxScale, minScale, children]);
 
-  const boxW = natural.w > 0 ? Math.floor(natural.w * scale) : undefined;
-  const boxH = natural.h > 0 ? Math.floor(natural.h * scale) : undefined;
+  const boxW = natural.w > 0 ? Math.ceil(natural.w * scale) : undefined;
+  const boxH = natural.h > 0 ? Math.ceil(natural.h * scale) + 4 : undefined;
 
   return (
     <div ref={hostRef} className={`w-full min-w-0 ${className}`}>

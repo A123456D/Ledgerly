@@ -4,6 +4,54 @@ export type InvoiceStatus = "draft" | "issued" | "paid" | "void";
 export type TaxMode = "exclusive" | "inclusive";
 export type FontPair = "editorial" | "modern" | "mono" | "classic";
 
+/** Clickable regions on the invoice preview for per-section styling & editing. */
+export type InvoiceSectionId =
+  | "header"
+  | "logo"
+  | "reference"
+  | "dates"
+  | "from"
+  | "billTo"
+  | "lineItems"
+  | "totals"
+  | "notes"
+  | "payment";
+
+export type SectionAccents = Partial<Record<InvoiceSectionId, string>>;
+
+/** Decorative shape/text overlay on the invoice canvas (percent coords on A4 sheet). */
+export interface InvoiceDecoration {
+  id: string;
+  shapeId: string;
+  /** Top-left X as % of sheet width (0–100) */
+  x: number;
+  /** Top-left Y as % of sheet height (0–100) */
+  y: number;
+  /** Width as % of sheet width */
+  w: number;
+  /** Height as % of sheet height */
+  h: number;
+  rotation: number;
+  opacity: number;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  zIndex: number;
+  locked?: boolean;
+  /** Render behind invoice content (watermarks) */
+  behind?: boolean;
+  /** Optional CSS blur in px (soft glow orbs) */
+  blur?: number;
+  /** For shapeId === "text-block" */
+  text?: string;
+  fontSize?: number;
+  fontWeight?: "normal" | "bold";
+  /** For shapeId === "image" — uploaded image data URL */
+  imageDataUrl?: string;
+  /** How image/logo fills its box */
+  objectFit?: "contain" | "cover";
+}
+
 export type { InvoiceVisibility };
 
 /** Built-in template ids + `custom:{id}` for Canva/uploaded designs. */
@@ -28,14 +76,52 @@ export type TemplateId = BuiltinTemplateId | (string & {});
 export interface CustomTemplate {
   id: string;
   name: string;
-  source: "canva" | "upload";
+  source: "canva" | "upload" | "design";
   /** Full-page (or letterhead) design export from Canva / design tool */
-  backgroundDataUrl: string;
+  backgroundDataUrl?: string;
   accentColor: string;
   /** mm from top where invoice fields begin (leave room for Canva header art) */
-  contentTopMm: number;
-  contentStyle: "card" | "transparent" | "band";
+  contentTopMm?: number;
+  contentStyle?: "card" | "transparent" | "band";
   createdAt: string;
+  /** Builtin layout to render when source is "design" */
+  baseTemplateId?: BuiltinTemplateId;
+  fontPair?: FontPair;
+  sectionAccents?: SectionAccents;
+  decorations?: InvoiceDecoration[];
+  logoSizePx?: number;
+  visibility?: InvoiceVisibility;
+}
+
+export function isDesignCustomTemplate(
+  t: CustomTemplate | null | undefined,
+): t is CustomTemplate & { source: "design"; baseTemplateId: BuiltinTemplateId } {
+  return Boolean(
+    t &&
+      t.source === "design" &&
+      t.baseTemplateId &&
+      isBuiltinTemplateIdSafe(t.baseTemplateId),
+  );
+}
+
+/** Local check — avoids circular import with catalog. */
+function isBuiltinTemplateIdSafe(id: string): id is BuiltinTemplateId {
+  return (
+    id === "classic" ||
+    id === "minimal" ||
+    id === "bold" ||
+    id === "atelier" ||
+    id === "nordic" ||
+    id === "midnight" ||
+    id === "coral" ||
+    id === "slate" ||
+    id === "luxe" ||
+    id === "meadow" ||
+    id === "ink" ||
+    id === "studio" ||
+    id === "harbor" ||
+    id === "parchment"
+  );
 }
 
 export interface BusinessLogo {
@@ -157,6 +243,10 @@ export interface IssuedSnapshot {
   visibility?: InvoiceVisibility;
   /** Frozen logo size at issue time */
   logoSizePx?: number;
+  /** Per-section accent overrides frozen at issue */
+  sectionAccents?: SectionAccents;
+  /** Decorative shapes frozen at issue */
+  decorations?: InvoiceDecoration[];
 }
 
 export interface Invoice {
@@ -183,6 +273,10 @@ export interface Invoice {
   totals: InvoiceTotals;
   /** Toggle which blocks appear on preview / PDF */
   visibility?: InvoiceVisibility;
+  /** Per-section accent colours (falls back to accentColor) */
+  sectionAccents?: SectionAccents;
+  /** Decorative shapes / text on the invoice canvas */
+  decorations?: InvoiceDecoration[];
   snapshot?: IssuedSnapshot;
   lastSentAt?: string;
   lastSentTo?: string;

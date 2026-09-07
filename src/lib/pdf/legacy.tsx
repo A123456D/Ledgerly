@@ -63,7 +63,7 @@ export async function buildInvoicePdfBlobLegacy(
   const styles = StyleSheet.create({
     page: {
       padding: custom ? 36 : 40,
-      paddingTop: custom ? (custom.contentTopMm / 25.4) * 72 + 12 : 40,
+      paddingTop: custom ? ((custom.contentTopMm ?? 45) / 25.4) * 72 + 12 : 40,
       fontSize: 10,
       fontFamily: "Helvetica",
       color: ink,
