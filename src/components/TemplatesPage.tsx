@@ -9,6 +9,7 @@ import {
   importSharedTemplate,
 } from "@/lib/custom-templates";
 import { BUILTIN_TEMPLATES } from "@/lib/templates/catalog";
+import { templateDisplayName } from "@/lib/templates/display-name";
 import {
   GallerySavedDesignCard,
   GalleryTemplateCard,
@@ -115,7 +116,7 @@ export function TemplatesPage() {
             Template gallery
           </h2>
           <p className="text-xs text-[var(--muted)]">
-            Default: {settings?.defaultTemplate || "classic"}
+            Default: {templateDisplayName(settings?.defaultTemplate, savedDesigns)}
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

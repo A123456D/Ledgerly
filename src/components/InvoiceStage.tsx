@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { previewFitScale } from "@/lib/preview-scale";
 import { A4_HEIGHT_MM, A4_WIDTH_MM } from "@/lib/sheet-size";
 
 /**
@@ -35,8 +36,7 @@ export function InvoiceStage({
       const h = Math.max(sheet.offsetHeight, 1);
       const available = host.clientWidth;
       if (available <= 0) return;
-      // Round up so the scaled sheet isn't clipped by a short layout box
-      const next = Math.min(maxScale, Math.max(minScale, (available - 2) / w));
+      const next = previewFitScale(available, w, minScale, maxScale);
       setNatural({ w, h });
       setScale(next);
     };
