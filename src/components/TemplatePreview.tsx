@@ -1,8 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui";
 import { InvoiceStage } from "@/components/InvoiceStage";
+import {
+  TEMPLATE_PREVIEW_MODAL_MAX_SCALE,
+  TEMPLATE_PREVIEW_MODAL_MIN_SCALE,
+} from "@/lib/preview-scale";
 import {
   getBuiltinTemplate,
   type TemplateMeta,
@@ -187,6 +191,53 @@ export function SavedDesignThumb({
   );
 }
 
+function A4PreviewDialog({
+  title,
+  subtitle,
+  open,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-x-hidden overflow-y-auto bg-black/50 p-3 sm:p-8"
+      role="dialog"
+      aria-modal
+      aria-label={`Preview ${title}`}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full min-w-0 max-w-3xl overflow-hidden rounded-2xl bg-[var(--wash)] p-3 shadow-xl sm:p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2 sm:mb-4">
+          <div className="min-w-0">
+            <h2 className="font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
+              {title}
+            </h2>
+            <p className="text-sm text-[var(--muted)]">{subtitle}</p>
+          </div>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+        {/* min-w-0 + overflow-hidden: flex item can shrink; A4 scales to width instead of scrolling. */}
+        <div className="min-w-0 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 sm:p-3">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TemplatePreviewModal({
   meta,
   open,
@@ -200,35 +251,19 @@ export function TemplatePreviewModal({
   if (!open || !meta || !doc) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
-      role="dialog"
-      aria-modal
-      aria-label={`Preview ${meta.name}`}
-      onClick={onClose}
+    <A4PreviewDialog
+      title={meta.name}
+      subtitle={meta.blurb}
+      open={open}
+      onClose={onClose}
     >
-      <div
-        className="relative w-full max-w-3xl rounded-2xl bg-[var(--wash)] p-4 shadow-xl sm:p-6"
-        onClick={(e) => e.stopPropagation()}
+      <InvoiceStage
+        maxScale={TEMPLATE_PREVIEW_MODAL_MAX_SCALE}
+        minScale={TEMPLATE_PREVIEW_MODAL_MIN_SCALE}
       >
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
-              {meta.name}
-            </h2>
-            <p className="text-sm text-[var(--muted)]">{meta.blurb}</p>
-          </div>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-        <div className="overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-3">
-          <InvoiceStage maxScale={0.85} minScale={0.4}>
-            <InvoicePreview doc={doc} />
-          </InvoiceStage>
-        </div>
-      </div>
-    </div>
+        <InvoicePreview doc={doc} />
+      </InvoiceStage>
+    </A4PreviewDialog>
   );
 }
 
@@ -377,37 +412,19 @@ export function GallerySavedDesignCard({
           </div>
         </div>
       </div>
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
-          role="dialog"
-          aria-modal
-          aria-label={`Preview ${template.name}`}
-          onClick={() => setOpen(false)}
+      <A4PreviewDialog
+        title={template.name}
+        subtitle="Saved invoice design"
+        open={open}
+        onClose={() => setOpen(false)}
+      >
+        <InvoiceStage
+          maxScale={TEMPLATE_PREVIEW_MODAL_MAX_SCALE}
+          minScale={TEMPLATE_PREVIEW_MODAL_MIN_SCALE}
         >
-          <div
-            className="relative w-full max-w-3xl rounded-2xl bg-[var(--wash)] p-4 shadow-xl sm:p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
-                  {template.name}
-                </h2>
-                <p className="text-sm text-[var(--muted)]">Saved invoice design</p>
-              </div>
-              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-                Close
-              </Button>
-            </div>
-            <div className="overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-3">
-              <InvoiceStage maxScale={0.85} minScale={0.4}>
-                <InvoicePreview doc={doc} />
-              </InvoiceStage>
-            </div>
-          </div>
-        </div>
-      ) : null}
+          <InvoicePreview doc={doc} />
+        </InvoiceStage>
+      </A4PreviewDialog>
     </>
   );
 }

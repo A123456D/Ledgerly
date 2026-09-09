@@ -12,6 +12,7 @@ import { assetUrl } from "@/lib/asset";
 import { APP_NAME, BRAND_MARK_PATH } from "@/lib/brand";
 import { statusDisplay } from "@/lib/document-kind";
 import type { DocKind } from "@/lib/types";
+import { parseNonNegativeDecimal } from "@/lib/decimal-input";
 
 const links = [
   { href: "/", label: "Invoices" },
@@ -184,29 +185,43 @@ export function DecimalInput({
   disabled?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState("");
   const display =
     draft !== null ? draft : value === 0 ? "" : String(value);
 
   return (
-    <input
-      type="text"
-      inputMode="decimal"
-      disabled={disabled}
-      className={`${className} ${align === "right" ? "text-right tabular-nums" : ""}`}
-      placeholder={placeholder}
-      value={display}
-      onChange={(e) => {
-        const v = e.target.value.replace(",", ".");
-        if (v !== "" && !/^\d*\.?\d*$/.test(v)) return;
-        setDraft(v);
-        if (v === "" || v === ".") onChange(0);
-        else {
-          const n = parseFloat(v);
-          if (!Number.isNaN(n)) onChange(n);
-        }
-      }}
-      onBlur={() => setDraft(null)}
-    />
+    <div className="min-w-0">
+      <input
+        type="text"
+        inputMode="decimal"
+        disabled={disabled}
+        aria-invalid={error ? true : undefined}
+        className={`${className} ${align === "right" ? "text-right tabular-nums" : ""} ${
+          error ? "border-red-400" : ""
+        }`}
+        placeholder={placeholder}
+        value={display}
+        onChange={(e) => {
+          const parsed = parseNonNegativeDecimal(e.target.value);
+          setDraft(parsed.draft);
+          if (parsed.ok) {
+            setError("");
+            onChange(parsed.value);
+          } else {
+            setError(parsed.error);
+          }
+        }}
+        onBlur={() => {
+          setDraft(null);
+          setError("");
+        }}
+      />
+      {error ? (
+        <p className="mt-1 text-[11px] leading-tight text-red-700" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
