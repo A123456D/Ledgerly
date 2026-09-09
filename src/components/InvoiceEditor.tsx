@@ -18,6 +18,7 @@ import {
   saveInvoice,
   deleteDraftInvoice,
   convertQuoteToInvoice,
+  updateIssuedDocumentNumber,
 } from "@/lib/invoice-service";
 import { downloadInvoicePdf } from "@/lib/pdf/download";
 import { TemplatePicker } from "@/components/TemplatePicker";
@@ -83,6 +84,7 @@ import {
   issueDateLabel,
   isQuote,
 } from "@/lib/document-kind";
+import { normalizeDocumentNumber } from "@/lib/numbering";
 import type { InvoiceStatus } from "@/lib/types";
 
 export function InvoiceEditor({ id }: { id: string }) {
@@ -95,6 +97,7 @@ export function InvoiceEditor({ id }: { id: string }) {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [preview, setPreview] = useState<InvoiceViewModel | null>(null);
   const [peekNumber, setPeekNumber] = useState("");
+  const [issuedNumberDraft, setIssuedNumberDraft] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -157,12 +160,22 @@ export function InvoiceEditor({ id }: { id: string }) {
     }
   }, [invoice?.status, invoice?.kind, business?.invoicePrefix, business?.quotePrefix]);
 
+  useEffect(() => {
+    if (invoice && invoice.status !== "draft") {
+      setIssuedNumberDraft(invoice.number ?? "");
+    }
+  }, [invoice?.id, invoice?.number, invoice?.status]);
+
   // Must stay above any early return — hooks cannot be conditional.
   // Preview is refreshed async; overlay live design fields so drag/resize never snaps back.
   const livePreview = useMemo(() => {
     if (!preview || !invoice) return preview;
     return {
       ...preview,
+      number:
+        invoice.status !== "draft"
+          ? normalizeDocumentNumber(issuedNumberDraft) || preview.number
+          : normalizeDocumentNumber(invoice.number ?? "") || preview.number,
       decorations: invoice.decorations?.length
         ? invoice.decorations
         : preview.decorations,
@@ -174,7 +187,7 @@ export function InvoiceEditor({ id }: { id: string }) {
       logoSizePx: invoice.logoSizePx ?? preview.logoSizePx,
       visibility: invoice.visibility ?? preview.visibility,
     };
-  }, [preview, invoice]);
+  }, [preview, invoice, issuedNumberDraft]);
 
   if (!invoice) {
     return <p className="text-sm text-[var(--muted)]">Loading…</p>;
@@ -245,6 +258,37 @@ export function InvoiceEditor({ id }: { id: string }) {
       next.totals = recomputeTotals(next);
       return next;
     });
+  }
+
+  function setDraftNumber(value: string) {
+    setInvoice((inv) => {
+      if (!inv || inv.status !== "draft") return inv;
+      return { ...inv, number: value };
+    });
+  }
+
+  async function commitIssuedNumber(raw: string) {
+    if (!invoice || invoice.status === "draft") return;
+    if (
+      normalizeDocumentNumber(raw) ===
+      normalizeDocumentNumber(invoice.number ?? "")
+    ) {
+      setIssuedNumberDraft(invoice.number ?? "");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const next = await updateIssuedDocumentNumber(invoice.id, raw);
+      setInvoice(next);
+      setIssuedNumberDraft(next.number ?? "");
+      setMessage(`Number updated to ${next.number}`);
+    } catch (err) {
+      setIssuedNumberDraft(invoice.number ?? "");
+      setError(err instanceof Error ? err.message : "Could not update number");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function updateDecoration(id: string, patch: Partial<InvoiceDecoration>) {
@@ -768,6 +812,38 @@ export function InvoiceEditor({ id }: { id: string }) {
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
         <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5">
+          <Field
+            label={quoteDoc ? "Quote number" : "Invoice number"}
+            hint={
+              locked
+                ? "Updates this document and the PDF. Quotes and invoices keep separate sequences."
+                : `Leave blank to use ${peekNumber || "the next number"} when you ${quoteDoc ? "send" : "issue"}.`
+            }
+          >
+            <input
+              id="edit-section-reference"
+              className={`${inputClass} tabular-nums`}
+              value={locked ? issuedNumberDraft : (invoice.number ?? "")}
+              placeholder={peekNumber || undefined}
+              autoComplete="off"
+              spellCheck={false}
+              aria-label={quoteDoc ? "Quote number" : "Invoice number"}
+              disabled={busy}
+              onChange={(e) => {
+                if (locked) setIssuedNumberDraft(e.target.value);
+                else setDraftNumber(e.target.value);
+              }}
+              onBlur={() => {
+                if (locked) void commitIssuedNumber(issuedNumberDraft);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+            />
+          </Field>
           <fieldset disabled={locked} className="min-w-0 space-y-4 disabled:opacity-70">
 
             <div className="rounded-lg border border-[var(--line)] bg-[var(--wash)]/50 p-3 sm:p-4">
@@ -895,22 +971,7 @@ export function InvoiceEditor({ id }: { id: string }) {
               </div>
             </div>
 
-            <div id="edit-section-dates" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Field
-                label="Reference number"
-                hint={
-                  invoice.status === "draft"
-                    ? `Preview only — locked in when you ${quoteDoc ? "send" : "Issue"}`
-                    : undefined
-                }
-              >
-                <input
-                  id="edit-section-reference"
-                  className={`${inputClass} bg-[var(--wash)] tabular-nums`}
-                  readOnly
-                  value={invoice.number || peekNumber || "—"}
-                />
-              </Field>
+            <div id="edit-section-dates" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Field
                 label={
                   <span className="flex items-center justify-between gap-2">
@@ -1478,6 +1539,7 @@ export function InvoiceEditor({ id }: { id: string }) {
               onRemoveLine={removeLine}
               onClose={() => setSelectedSection(null)}
               onScrollToAnchor={scrollToEditAnchor}
+              peekNumber={peekNumber}
             />
           ) : null}
         </div>

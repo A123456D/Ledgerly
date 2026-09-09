@@ -2,7 +2,13 @@ import { db, getBusiness, getSettings, saveSettings } from "./db";
 import { getCustomTemplate } from "./custom-templates";
 import { addDaysISO, todayISO, uid } from "./format";
 import { calculateTotals } from "./invoice-math";
-import { allocateNumber, previewNextNumber } from "./numbering";
+import {
+  bumpSequenceForUsedNumber,
+  numberIsTaken,
+  parseDocumentNumberInput,
+  planIssueNumber,
+  previewNextNumber,
+} from "./numbering";
 import {
   EMPTY_PARTY,
   type Business,
@@ -17,7 +23,7 @@ import {
   type PartySnapshot,
   type TemplateId,
 } from "./types";
-import { documentKind, isQuote } from "./document-kind";
+import { documentKind, documentNounLower, isQuote } from "./document-kind";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "./templates/catalog";
 import {
@@ -52,6 +58,41 @@ export function clientToParty(client: Client): PartySnapshot {
     country: client.country,
     taxId: client.taxId,
   };
+}
+
+export function takenNumbersForKind(
+  invoices: Array<Pick<Invoice, "id" | "kind" | "number" | "snapshot">>,
+  kind: DocKind,
+  excludeId: string,
+): string[] {
+  const want = documentKind(kind);
+  const taken: string[] = [];
+  for (const invoice of invoices) {
+    if (invoice.id === excludeId) continue;
+    if (documentKind(invoice.kind) !== want) continue;
+    if (invoice.number) taken.push(invoice.number);
+    if (invoice.snapshot?.number) taken.push(invoice.snapshot.number);
+  }
+  return taken;
+}
+
+async function takenNumbers(kind: DocKind, excludeId: string): Promise<string[]> {
+  return takenNumbersForKind(await db.invoices.toArray(), kind, excludeId);
+}
+
+function sequencePatch(
+  quote: boolean,
+  nextState: { nextSequence: number; sequenceYear: number },
+) {
+  return quote
+    ? {
+        nextQuoteSequence: nextState.nextSequence,
+        quoteSequenceYear: nextState.sequenceYear,
+      }
+    : {
+        nextSequence: nextState.nextSequence,
+        sequenceYear: nextState.sequenceYear,
+      };
 }
 
 /**
@@ -277,6 +318,17 @@ export async function saveInvoice(
   if (invoice.status !== "draft") {
     throw new Error("Only drafts can be edited");
   }
+  const parsed = parseDocumentNumberInput(invoice.number ?? "", {
+    allowEmpty: true,
+  });
+  if (!parsed.ok) {
+    throw new Error(parsed.error);
+  }
+  if (parsed.value && numberIsTaken(parsed.value, await takenNumbers(documentKind(invoice.kind), invoice.id))) {
+    throw new Error(
+      `That number is already used on another ${documentNounLower(invoice.kind)}`,
+    );
+  }
   const { invoice: withClient, created } = await ensureClientFromInvoice(invoice);
   const business = normalizeBusinessLogos(await getBusiness());
   const logoDataUrl = resolveLogoDataUrl(
@@ -287,6 +339,7 @@ export async function saveInvoice(
   );
   const next: Invoice & { clientCreated?: boolean } = {
     ...withClient,
+    number: parsed.value,
     decorations: fillLogoImages(withClient.decorations, logoDataUrl),
     totals: recomputeTotals(withClient),
     updatedAt: new Date().toISOString(),
@@ -337,8 +390,10 @@ export async function issueInvoice(id: string): Promise<Invoice> {
   const year = new Date(
     (linked.issueDate || todayISO()) + "T12:00:00",
   ).getFullYear();
-  const { number, nextState } = allocateNumber(
-    {
+  const prefix = quote ? business.quotePrefix || "QUO-" : business.invoicePrefix;
+  const planned = planIssueNumber({
+    reservedNumber: linked.number,
+    state: {
       nextSequence: quote
         ? (settings.nextQuoteSequence ?? 1)
         : settings.nextSequence,
@@ -346,9 +401,18 @@ export async function issueInvoice(id: string): Promise<Invoice> {
         ? (settings.quoteSequenceYear ?? year)
         : settings.sequenceYear,
     },
-    quote ? business.quotePrefix || "QUO-" : business.invoicePrefix,
+    prefix,
     year,
-  );
+    takenNumbers: await takenNumbers(documentKind(invoice.kind), invoice.id),
+  });
+  if (!planned.ok) {
+    throw new Error(
+      planned.error === "That number is already used"
+        ? `That number is already used on another ${documentNounLower(invoice.kind)}`
+        : planned.error,
+    );
+  }
+  const { number, nextState } = planned;
 
   const totals = recomputeTotals(linked);
   const custom = linked.templateId.startsWith("custom:")
@@ -408,17 +472,7 @@ export async function issueInvoice(id: string): Promise<Invoice> {
 
   await db.transaction("rw", db.invoices, db.settings, db.clients, async () => {
     await db.invoices.put(issued);
-    await saveSettings(
-      quote
-        ? {
-            nextQuoteSequence: nextState.nextSequence,
-            quoteSequenceYear: nextState.sequenceYear,
-          }
-        : {
-            nextSequence: nextState.nextSequence,
-            sequenceYear: nextState.sequenceYear,
-          },
-    );
+    await saveSettings(sequencePatch(quote, nextState));
   });
 
   void import("@/lib/auto-backup").then(({ createAutoBackup }) =>
@@ -426,6 +480,64 @@ export async function issueInvoice(id: string): Promise<Invoice> {
   );
 
   return issued;
+}
+
+export async function updateIssuedDocumentNumber(
+  id: string,
+  rawNumber: string,
+): Promise<Invoice> {
+  const invoice = await db.invoices.get(id);
+  if (!invoice) throw new Error("Document not found");
+  if (invoice.status === "draft") {
+    throw new Error("Save the draft to keep this number, or issue it");
+  }
+  const parsed = parseDocumentNumberInput(rawNumber, { allowEmpty: false });
+  if (!parsed.ok || !parsed.value) {
+    throw new Error(parsed.ok ? "Enter a number" : parsed.error);
+  }
+  const kind = documentKind(invoice.kind);
+  if (numberIsTaken(parsed.value, await takenNumbers(kind, invoice.id))) {
+    throw new Error(
+      `That number is already used on another ${documentNounLower(kind)}`,
+    );
+  }
+
+  const business = await getBusiness();
+  const settings = await getSettings();
+  const quote = isQuote(kind);
+  const year = new Date(
+    (invoice.issueDate || invoice.snapshot?.issueDate || todayISO()) +
+      "T12:00:00",
+  ).getFullYear();
+  const nextState = bumpSequenceForUsedNumber(
+    {
+      nextSequence: quote
+        ? (settings.nextQuoteSequence ?? 1)
+        : settings.nextSequence,
+      sequenceYear: quote
+        ? (settings.quoteSequenceYear ?? year)
+        : settings.sequenceYear,
+    },
+    quote ? business.quotePrefix || "QUO-" : business.invoicePrefix,
+    year,
+    parsed.value,
+  );
+
+  const next: Invoice = {
+    ...invoice,
+    number: parsed.value,
+    snapshot: invoice.snapshot
+      ? { ...invoice.snapshot, number: parsed.value }
+      : invoice.snapshot,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await db.transaction("rw", db.invoices, db.settings, async () => {
+    await db.invoices.put(next);
+    await saveSettings(sequencePatch(quote, nextState));
+  });
+
+  return next;
 }
 
 export async function markInvoiceStatus(
@@ -612,10 +724,15 @@ export async function displayDocumentLive(
     return doc;
   }
   const business = normalizeBusinessLogos(await getBusiness());
+  const reserved = parseDocumentNumberInput(invoice.number ?? "", {
+    allowEmpty: true,
+  });
   const peek =
-    invoice.status === "draft"
-      ? await peekDraftNumber(documentKind(invoice.kind))
-      : (invoice.number ?? "—");
+    reserved.ok && reserved.value
+      ? reserved.value
+      : invoice.status === "draft"
+        ? await peekDraftNumber(documentKind(invoice.kind))
+        : (invoice.number ?? "—");
 
   let customTemplate: CustomTemplate | null = null;
   let accent = invoice.accentColor || business.accentColor;

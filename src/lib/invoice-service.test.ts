@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayDocument } from "./invoice-service";
+import { displayDocument, takenNumbersForKind } from "./invoice-service";
 import type { Invoice } from "./types";
 
 function issuedStudioInvoice(): Invoice {
@@ -101,5 +101,18 @@ describe("displayDocument", () => {
     expect(doc.customTemplate?.source).toBe("design");
     expect(doc.customTemplate?.baseTemplateId).toBe("harbor");
     expect(doc.decorations?.[0].imageDataUrl).toBe("data:image/png;base64,aaa");
+  });
+});
+
+describe("takenNumbersForKind", () => {
+  it("treats quotes and invoices as separate sequences", () => {
+    const invoices: Pick<Invoice, "id" | "kind" | "number" | "snapshot">[] = [
+      { id: "q1", kind: "quote", number: "QUO-2026-0001", snapshot: undefined },
+      { id: "i1", kind: "invoice", number: "QUO-2026-0001", snapshot: undefined },
+    ];
+    expect(takenNumbersForKind(invoices, "quote", "new")).toEqual([
+      "QUO-2026-0001",
+    ]);
+    expect(takenNumbersForKind(invoices, "invoice", "i1")).toEqual([]);
   });
 });

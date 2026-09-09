@@ -106,8 +106,8 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
           </p>
           <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">
             {kind === "quote"
-              ? "Start a draft quote, send it to lock the number, then convert it to an invoice when accepted."
-              : "Start a draft, pick a template, and issue when you\u2019re ready. Numbers only lock on issue."}
+              ? "Start a draft quote, set the number if you need a specific one, send it, then convert it to an invoice when accepted."
+              : "Start a draft, pick a template, and issue when you\u2019re ready. You can type the number or leave it blank to auto-assign."}
           </p>
           <Button className="mt-6" onClick={onNew} disabled={busy}>
             Create your first {nounLower}

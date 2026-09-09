@@ -265,6 +265,7 @@ export interface Invoice {
   /** Missing on older records — treat as invoice. */
   kind?: DocKind;
   status: InvoiceStatus;
+  /** Draft: null/blank auto-assigns on issue. Issued documents keep this printed number. */
   number: string | null;
   /** Quote that this invoice was created from */
   sourceQuoteId?: string | null;

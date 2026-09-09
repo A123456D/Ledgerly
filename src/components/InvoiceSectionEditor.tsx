@@ -108,6 +108,7 @@ export function InvoiceSectionEditor({
   onRemoveLine,
   onClose,
   onScrollToAnchor,
+  peekNumber,
 }: {
   section: InvoiceSectionId;
   globalAccent: string;
@@ -123,6 +124,7 @@ export function InvoiceSectionEditor({
   onRemoveLine: (lineId: string) => void;
   onClose: () => void;
   onScrollToAnchor: (anchorId: string) => void;
+  peekNumber?: string;
 }) {
   const meta = sectionMeta(section);
   const current = sectionAccents[section] || globalAccent;
@@ -268,6 +270,19 @@ export function InvoiceSectionEditor({
 
         {section === "dates" ? (
           <div className="grid grid-cols-2 gap-2">
+            <Field
+              label={invoice.kind === "quote" ? "Quote number" : "Invoice number"}
+              hint="Leave blank to auto-assign when you issue"
+            >
+              <input
+                className={`${inputClass} tabular-nums`}
+                value={invoice.number ?? ""}
+                placeholder={peekNumber || undefined}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => onUpdateInvoice({ number: e.target.value })}
+              />
+            </Field>
             <Field label={issueDateLabel(invoice.kind)}>
               <input
                 className={inputClass}
@@ -319,10 +334,19 @@ export function InvoiceSectionEditor({
         ) : null}
 
         {section === "reference" ? (
-          <p className="text-xs text-[var(--muted)]">
-            The reference number is assigned when you issue the {invoice.kind === "quote" ? "quote" : "invoice"}. Colour
-            above changes this block’s accent.
-          </p>
+          <Field
+            label={invoice.kind === "quote" ? "Quote number" : "Invoice number"}
+            hint="Leave blank to auto-assign when you issue. Colour above changes this block’s accent."
+          >
+            <input
+              className={`${inputClass} tabular-nums`}
+              value={invoice.number ?? ""}
+              placeholder={peekNumber || undefined}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => onUpdateInvoice({ number: e.target.value })}
+            />
+          </Field>
         ) : null}
 
         {showLineEditor ? (
