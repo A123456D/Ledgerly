@@ -26,6 +26,25 @@ export function captureSheetHeightPx(
   return a4PageCount(h, pagePx) * pagePx;
 }
 
+/** Shrink onto one A4 rather than a sparse second page, down to this scale. */
+export const PAGE_FIT_MIN_SCALE = 0.82;
+
+export function singlePageFitScale(
+  contentPx: number,
+  pagePx = A4_HEIGHT_PX,
+): number {
+  if (contentPx <= pagePx) return 1;
+  return pagePx / contentPx;
+}
+
+export function shouldFitToSinglePage(
+  contentPx: number,
+  pagePx = A4_HEIGHT_PX,
+  minScale = PAGE_FIT_MIN_SCALE,
+): boolean {
+  return singlePageFitScale(contentPx, pagePx) >= minScale;
+}
+
 /** How many A4 pages a raster occupies. Ignore a trailing sliver. */
 export function pdfRasterPageCount(
   imageHeightMm: number,

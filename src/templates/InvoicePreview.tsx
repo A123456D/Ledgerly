@@ -580,10 +580,12 @@ function InvoiceClosing({
   invert?: boolean;
 }) {
   return (
-    <div data-invoice-avoid-break>
-      <DueCard doc={doc} accent={accent} invert={invert} />
+    <>
+      <div data-invoice-avoid-break>
+        <DueCard doc={doc} accent={accent} invert={invert} />
+      </div>
       <Notes doc={doc} light={light} accent={accent} />
-    </div>
+    </>
   );
 }
 
@@ -608,7 +610,7 @@ function Sheet({
     <article
       ref={sheetRef}
       data-invoice-sheet="true"
-      className={`invoice-sheet relative ${bleed ? "invoice-sheet-bleed overflow-hidden" : "overflow-visible"} ${className}`}
+      className={`invoice-sheet relative ${bleed ? "invoice-sheet-bleed" : ""} ${className}`}
       style={{ ...fontPairCssVars(fontPair), ...style, containerType: "inline-size" }}
     >
       {back.length > 0 ? (

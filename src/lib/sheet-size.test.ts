@@ -4,6 +4,8 @@ import {
   A4_HEIGHT_PX,
   captureSheetHeightPx,
   pdfRasterPageCount,
+  shouldFitToSinglePage,
+  singlePageFitScale,
 } from "./sheet-size";
 
 describe("captureSheetHeightPx", () => {
@@ -15,6 +17,18 @@ describe("captureSheetHeightPx", () => {
 
   it("uses two pages when content clearly overflows", () => {
     expect(captureSheetHeightPx(A4_HEIGHT_PX + 80)).toBe(A4_HEIGHT_PX * 2);
+  });
+});
+
+describe("shouldFitToSinglePage", () => {
+  it("fits a modest overflow onto one page", () => {
+    expect(shouldFitToSinglePage(A4_HEIGHT_PX)).toBe(true);
+    expect(shouldFitToSinglePage(Math.round(A4_HEIGHT_PX * 1.15))).toBe(true);
+    expect(singlePageFitScale(A4_HEIGHT_PX * 1.15)).toBeCloseTo(1 / 1.15, 5);
+  });
+
+  it("paginates when shrinking would make type too small", () => {
+    expect(shouldFitToSinglePage(A4_HEIGHT_PX * 1.5)).toBe(false);
   });
 });
 

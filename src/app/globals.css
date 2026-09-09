@@ -72,7 +72,7 @@ textarea {
   max-width: 210mm;
   min-height: 297mm;
   padding: 14mm 14mm 16mm;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
   box-shadow:
     0 1px 2px rgba(20, 32, 28, 0.06),
@@ -91,6 +91,22 @@ textarea {
 
 .invoice-sheet-bleed .invoice-pad {
   padding: 12mm 14mm 14mm;
+}
+
+/* Tighten a slightly-over-A4 invoice so PDF/export stays on one page. */
+.invoice-sheet-compact:not(.invoice-sheet-bleed) {
+  padding: 10mm 12mm 11mm;
+}
+.invoice-sheet-compact .invoice-pad {
+  padding: 9mm 12mm 10mm;
+}
+.invoice-sheet-compact [data-invoice-content] {
+  font-size: 93%;
+}
+.invoice-sheet-compact table th,
+.invoice-sheet-compact table td {
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
 }
 
 @media print {

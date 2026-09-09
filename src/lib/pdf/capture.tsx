@@ -4,20 +4,26 @@ import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { domToPng } from "modern-screenshot";
 import { jsPDF } from "jspdf";
-import { applySmartPageBreaks } from "@/lib/pdf/page-breaks";
+import {
+  addContinuationMarkers,
+  applySmartPageBreaks,
+  wrapSheetToFitPage,
+} from "@/lib/pdf/page-breaks";
 import { stripSectionEditChrome } from "@/components/invoice-edit-context";
 import {
   InvoicePreview,
   type InvoiceViewModel,
 } from "@/templates/InvoicePreview";
 import { fillLogoImages } from "@/lib/decorations/logo-decoration";
+import { documentNoun } from "@/lib/document-kind";
 import {
   A4_HEIGHT_MM,
   A4_HEIGHT_PX,
   A4_WIDTH_MM,
   A4_WIDTH_PX,
   captureSheetHeightPx,
-  pdfRasterPageCount,
+  shouldFitToSinglePage,
+  singlePageFitScale,
 } from "@/lib/sheet-size";
 
 function sleep(ms: number) {
@@ -54,7 +60,7 @@ async function waitForImages(root: HTMLElement) {
   );
 }
 
-function pngToPdfBlob(dataUrl: string): Blob {
+function pngToPdfBlob(dataUrl: string, pages: number): Blob {
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -62,12 +68,11 @@ function pngToPdfBlob(dataUrl: string): Blob {
     compress: true,
   });
 
-  const props = pdf.getImageProperties(dataUrl);
+  const pageCount = Math.max(1, Math.round(pages));
   const imgW = A4_WIDTH_MM;
-  const imgH = (props.height * imgW) / props.width;
-  const pages = pdfRasterPageCount(imgH);
+  const imgH = pageCount * A4_HEIGHT_MM;
 
-  for (let i = 0; i < pages; i++) {
+  for (let i = 0; i < pageCount; i++) {
     if (i > 0) pdf.addPage();
     const position = -i * A4_HEIGHT_MM;
     pdf.addImage(dataUrl, "PNG", 0, position, imgW, imgH, undefined, "FAST");
@@ -89,6 +94,47 @@ function measureInkHeight(sheet: HTMLElement): number {
   });
 
   return Math.max(bottom, content?.offsetHeight ?? 0, A4_HEIGHT_PX * 0.5);
+}
+
+function continuationLabel(doc?: InvoiceViewModel): string {
+  if (!doc) return "Continued";
+  const n = doc.number?.trim();
+  return n
+    ? `${documentNoun(doc.kind)} ${n} · continued`
+    : `${documentNoun(doc.kind)} · continued`;
+}
+
+/** Compact, then either shrink onto one A4 or paginate on row boundaries. */
+function layoutSheetForPdf(
+  sheet: HTMLElement,
+  doc?: InvoiceViewModel,
+): { heightPx: number; pages: number } {
+  sheet.classList.add("invoice-pdf-capture");
+  let ink = measureInkHeight(sheet);
+
+  if (ink > A4_HEIGHT_PX + 4) {
+    sheet.classList.add("invoice-sheet-compact");
+    ink = measureInkHeight(sheet);
+  }
+
+  if (shouldFitToSinglePage(ink)) {
+    wrapSheetToFitPage(sheet, singlePageFitScale(ink), A4_HEIGHT_PX);
+    return { heightPx: A4_HEIGHT_PX, pages: 1 };
+  }
+
+  applySmartPageBreaks(sheet, A4_HEIGHT_PX);
+  ink = measureInkHeight(sheet);
+  const heightPx = captureSheetHeightPx(ink);
+  const pages = Math.max(1, Math.round(heightPx / A4_HEIGHT_PX));
+  if (pages > 1) {
+    addContinuationMarkers(
+      sheet,
+      A4_HEIGHT_PX,
+      pages,
+      continuationLabel(doc),
+    );
+  }
+  return { heightPx, pages };
 }
 
 function prepareSheetForCapture(sheet: HTMLElement) {
@@ -162,13 +208,12 @@ async function captureLivePreviewSheet(): Promise<Blob | null> {
     await document.fonts?.ready;
     await sleep(80);
 
-    applySmartPageBreaks(clone, A4_HEIGHT_PX);
     stripSectionEditChrome(clone);
     await sleep(40);
 
-    const height = captureSheetHeightPx(measureInkHeight(clone));
-    const dataUrl = await captureNode(clone, height);
-    return pngToPdfBlob(dataUrl);
+    const { heightPx, pages } = layoutSheetForPdf(clone);
+    const dataUrl = await captureNode(clone, heightPx);
+    return pngToPdfBlob(dataUrl, pages);
   } finally {
     host.remove();
   }
@@ -199,13 +244,12 @@ async function captureRemountedPreview(doc: InvoiceViewModel): Promise<Blob> {
     if (!sheet) throw new Error("Invoice preview failed to render for PDF");
 
     prepareSheetForCapture(sheet);
-    applySmartPageBreaks(sheet, A4_HEIGHT_PX);
     stripSectionEditChrome(sheet);
     await sleep(40);
 
-    const height = captureSheetHeightPx(measureInkHeight(sheet));
-    const dataUrl = await captureNode(sheet, height);
-    return pngToPdfBlob(dataUrl);
+    const { heightPx, pages } = layoutSheetForPdf(sheet, doc);
+    const dataUrl = await captureNode(sheet, heightPx);
+    return pngToPdfBlob(dataUrl, pages);
   } finally {
     root.unmount();
     host.remove();
