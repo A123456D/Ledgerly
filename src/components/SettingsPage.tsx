@@ -172,27 +172,34 @@ export function SettingsPage() {
               <input className={inputClass} value={form.country} onChange={(e) => patch("country", e.target.value)} />
             </Field>
           </div>
-          <Field label="Tax / VAT ID">
-            <input className={inputClass} value={form.taxId} onChange={(e) => patch("taxId", e.target.value)} />
+          <Field label="VAT No." hint="SARS 10-digit VAT number. Needed on tax invoices.">
+            <input className={inputClass} value={form.taxId} placeholder="4123456789" onChange={(e) => patch("taxId", e.target.value)} />
           </Field>
         </section>
 
         <section className="space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 sm:p-5">
           <h2 className="font-[family-name:var(--font-display)] text-xl">Defaults & brand</h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Currency" hint="ISO code — ZAR for South African rand">
+            <Field
+              label="Currency"
+              hint={
+                form.currency && form.currency !== "ZAR"
+                  ? "ISO code — ZAR for South African rand. SA tax invoices expect ZAR."
+                  : "ISO code — ZAR for South African rand"
+              }
+            >
               <input className={inputClass} value={form.currency} onChange={(e) => patch("currency", e.target.value.toUpperCase())} maxLength={3} />
             </Field>
             <Field
               label="Default VAT rate %"
-              hint="Standard SA VAT is 15%. Use Calculator → VAT to add or strip tax."
+              hint="Standard SA rate is 15%. Line rates can still differ."
             >
               <input className={inputClass} type="number" min={0} step={0.01} value={form.defaultTaxRate} onChange={(e) => patch("defaultTaxRate", Number(e.target.value))} />
             </Field>
-            <Field label="VAT mode">
+            <Field label="VAT mode" hint="This is the default for new invoices. Each invoice can override.">
               <select className={inputClass} value={form.taxMode} onChange={(e) => patch("taxMode", e.target.value as TaxMode)}>
-                <option value="exclusive">Exclusive (add VAT on top)</option>
-                <option value="inclusive">Inclusive (VAT in price)</option>
+                <option value="exclusive">Prices excl. VAT (add 15% on top)</option>
+                <option value="inclusive">Prices incl. VAT (VAT already in the rate)</option>
               </select>
             </Field>
             <Field label="Net days">
