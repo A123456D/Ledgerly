@@ -27,10 +27,26 @@ const links = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     ensureDefaults().then(() => setReady(true));
   }, []);
+
+  function isActive(link: { href: string }) {
+    if (link.href === "/") return pathname === "/" || pathname.startsWith("/invoice");
+    if (link.href === "/quotes") return pathname.startsWith("/quote");
+    if (link.href === "/payslips") return pathname.startsWith("/payslip");
+    if (link.href === "/calculator") return pathname.startsWith("/calculator") || pathname.startsWith("/vat");
+    return pathname.startsWith(link.href);
+  }
+
+  const linkClass = (active: boolean) =>
+    `inline-flex shrink-0 items-center rounded-md px-3 py-2 text-sm whitespace-nowrap transition ${
+      active
+        ? "bg-[var(--ink)] text-[var(--paper)]"
+        : "text-[var(--muted)] hover:bg-[var(--wash)] hover:text-[var(--ink)]"
+    }`;
 
   return (
     <div className="flex min-h-full min-h-[100dvh] max-w-[100vw] flex-col overflow-x-clip pb-[env(safe-area-inset-bottom)]">
@@ -53,38 +69,56 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {APP_NAME}
               </span>
             </Link>
-            <div className="shrink-0">
+            <div className="flex shrink-0 items-center gap-1">
               <InstallAppButton />
+              {/* Hamburger — mobile only */}
+              <button
+                className="sm:hidden inline-flex h-11 w-11 items-center justify-center rounded-md text-[var(--muted)] transition hover:bg-[var(--wash)] hover:text-[var(--ink)]"
+                aria-label={menuOpen ? "Close menu" : "Open menu"}
+                aria-expanded={menuOpen}
+                aria-controls="mobile-nav"
+                onClick={() => setMenuOpen((v) => !v)}
+              >
+                {menuOpen ? (
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M4 4l12 12M16 4L4 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
-          <nav className="flex flex-wrap gap-1 pb-2.5">
-            {links.map((link) => {
-              const active =
-                link.href === "/"
-                  ? pathname === "/" || pathname.startsWith("/invoice")
-                  : link.href === "/quotes"
-                    ? pathname.startsWith("/quote")
-                    : link.href === "/payslips"
-                      ? pathname.startsWith("/payslip")
-                      : link.href === "/calculator"
-                        ? pathname.startsWith("/calculator") ||
-                          pathname.startsWith("/vat")
-                        : pathname.startsWith(link.href);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`inline-flex min-h-11 shrink-0 items-center rounded-md px-3 py-2 text-sm whitespace-nowrap transition sm:min-h-0 sm:py-1.5 ${
-                    active
-                      ? "bg-[var(--ink)] text-[var(--paper)]"
-                      : "text-[var(--muted)] hover:bg-[var(--wash)] hover:text-[var(--ink)]"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              );
-            })}
+
+          {/* Desktop nav — hidden on mobile */}
+          <nav className="hidden sm:flex flex-wrap gap-1 pb-2.5">
+            {links.map((link) => (
+              <Link key={link.href} href={link.href} className={`${linkClass(isActive(link))} sm:min-h-0 sm:py-1.5`}>
+                {link.label}
+              </Link>
+            ))}
           </nav>
+
+          {/* Mobile nav — shown when hamburger is open */}
+          {menuOpen && (
+            <nav id="mobile-nav" className="sm:hidden pb-3 pt-1">
+              <ul className="flex flex-col gap-0.5" role="list">
+                {links.map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className={`${linkClass(isActive(link))} w-full min-h-11`}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
         </div>
       </header>
       <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] py-4 sm:px-6 sm:py-8">
