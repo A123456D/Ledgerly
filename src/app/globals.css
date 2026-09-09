@@ -10,6 +10,15 @@
   --accent: #0f766e;
   --background: var(--paper);
   --foreground: var(--ink);
+  /* Mobile: py-2.5(10) + h-11 hamburger(44) + py-2.5(10) + border(1) = 65px */
+  --nav-h: calc(4.25rem + env(safe-area-inset-top, 0px));
+}
+
+@media (min-width: 640px) {
+  :root {
+    /* sm+: py-2.5(10) + h-9 logo(36) + py-2.5(10) logo-row=56 + nav-links py-1.5(32) + pb-2.5(10) + border(1) ≈ 99px */
+    --nav-h: calc(6.5rem + env(safe-area-inset-top, 0px));
+  }
 }
 
 @theme inline {

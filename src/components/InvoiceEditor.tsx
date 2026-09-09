@@ -1489,7 +1489,7 @@ export function InvoiceEditor({ id }: { id: string }) {
           </fieldset>
         </div>
 
-        <div className="relative order-first min-w-0 sticky top-14 self-start sm:top-20 xl:order-none xl:flex-[1.05]">
+        <div className="relative order-first min-w-0 sticky top-[var(--nav-h)] self-start xl:order-none xl:flex-[1.05]">
           <p className="mb-2 text-xs uppercase tracking-wider text-[var(--muted)]">
             Live A4 preview
           </p>
