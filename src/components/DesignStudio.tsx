@@ -11,6 +11,11 @@ import {
   isLogoDecoration,
   LOGO_SHAPE_ID,
 } from "@/lib/decorations/logo-decoration";
+import {
+  BUSINESS_NAME_SHAPE_ID,
+  createBusinessNameDecoration,
+  isBusinessNameDecoration,
+} from "@/lib/decorations/business-name-decoration";
 import { fileToDataUrl } from "@/lib/image";
 import {
   SHAPE_CATALOG,
@@ -59,7 +64,13 @@ export function DesignStudio({
   const [uploadBusy, setUploadBusy] = useState(false);
 
   const shapeCatalog = useMemo(
-    () => SHAPE_CATALOG.filter((s) => s.id !== LOGO_SHAPE_ID && s.id !== IMAGE_SHAPE_ID),
+    () =>
+      SHAPE_CATALOG.filter(
+        (s) =>
+          s.id !== LOGO_SHAPE_ID &&
+          s.id !== IMAGE_SHAPE_ID &&
+          s.id !== BUSINESS_NAME_SHAPE_ID,
+      ),
     [],
   );
 
@@ -70,6 +81,11 @@ export function DesignStudio({
 
   const logoLayers = useMemo(
     () => decorations.filter(isLogoDecoration),
+    [decorations],
+  );
+
+  const nameLayers = useMemo(
+    () => decorations.filter(isBusinessNameDecoration),
     [decorations],
   );
 
@@ -90,6 +106,7 @@ export function DesignStudio({
   function layerLabel(d: InvoiceDecoration) {
     if (isLogoDecoration(d)) return "Logo";
     if (isImageDecoration(d)) return "Image";
+    if (isBusinessNameDecoration(d)) return "Business name";
     return d.shapeId;
   }
 
@@ -127,7 +144,7 @@ export function DesignStudio({
         <div>
           <p className="text-sm font-medium text-[var(--ink)]">Design studio</p>
         <p className="mt-0.5 text-xs text-[var(--muted)]">
-          Upload images or add shapes — drag them on the preview. Templates stay clean; you decorate.
+          Drag the logo and business name on the preview. Templates stay clean; you decorate.
         </p>
         </div>
         <label className="inline-flex cursor-pointer items-center gap-2 text-xs" title="Marks when you're working on shapes — sections stay clickable">
@@ -222,6 +239,54 @@ export function DesignStudio({
         ) : (
           <p className="py-3 text-center text-[11px] text-[var(--muted)]">
             No logo layers — add one to place it on the invoice
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold text-[var(--ink)]">Business name</p>
+            <p className="text-[11px] text-[var(--muted)]">
+              Same as the logo — select it, then drag anywhere on the page
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (nameLayers.length) {
+                onSelect(nameLayers[0].id);
+                onToggleMode(true);
+                return;
+              }
+              const layer = createBusinessNameDecoration({
+                fill: "#1c1917",
+              });
+              onAdd(layer);
+            }}
+            className="rounded-lg border border-[var(--line)] bg-[var(--wash)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--ink)] hover:bg-[var(--wash)]/80"
+          >
+            {nameLayers.length ? "Select name" : "+ Place name"}
+          </button>
+        </div>
+        {nameLayers.length ? (
+          <button
+            type="button"
+            onClick={() => {
+              onSelect(nameLayers[0].id);
+              onToggleMode(true);
+            }}
+            className={`w-full truncate rounded-lg border px-3 py-2 text-left text-sm font-medium ${
+              selectedId === nameLayers[0].id
+                ? "border-teal-700 bg-teal-50 text-teal-900"
+                : "border-[var(--line)] bg-[var(--wash)] text-[var(--ink)]"
+            }`}
+          >
+            Drag on preview to move
+          </button>
+        ) : (
+          <p className="py-3 text-center text-[11px] text-[var(--muted)]">
+            Name is hidden — place it to drag it off the logo
           </p>
         )}
       </div>
@@ -434,6 +499,41 @@ export function DesignStudio({
             Selected: {layerLabel(selected)}
           </p>
 
+          {isBusinessNameDecoration(selected) ? (
+            <>
+              <p className="text-[11px] text-[var(--muted)]">
+                Drag on the preview to move. The wording always comes from your
+                business settings — sharing a template never sends your name.
+              </p>
+              <div>
+                <p className="mb-1.5 text-xs font-medium">Name colour</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {["#ffffff", "#1c1917", ...ACCENT_PRESETS].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      title={c}
+                      onClick={() => onUpdate(selected.id, { fill: c })}
+                      className="h-6 w-6 rounded-full border border-white/80"
+                      style={{ background: c }}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    value={
+                      selected.fill.startsWith("#") ? selected.fill : "#1c1917"
+                    }
+                    onChange={(e) =>
+                      onUpdate(selected.id, { fill: e.target.value })
+                    }
+                    className="h-6 w-8 cursor-pointer rounded border border-[var(--line)]"
+                    aria-label="Custom name colour"
+                  />
+                </div>
+              </div>
+            </>
+          ) : null}
+
           {isLogoDecoration(selected) ? (
             <p className="text-[11px] text-[var(--muted)]">
               Drag on the preview to move. Use width/height or corner handles to resize.
@@ -576,7 +676,7 @@ export function DesignStudio({
             />
           </Field>
 
-          {!isMedia ? (
+          {!isMedia && !isBusinessNameDecoration(selected) ? (
           <>
           <div>
             <p className="mb-1.5 text-xs font-medium">Fill colour</p>

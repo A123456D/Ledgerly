@@ -1,9 +1,13 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { PageHeader } from "@/components/ui";
+import { Button, PageHeader } from "@/components/ui";
 import { db, saveSettings } from "@/lib/db";
-import { deleteCustomTemplate } from "@/lib/custom-templates";
+import {
+  deleteCustomTemplate,
+  importSharedTemplate,
+} from "@/lib/custom-templates";
 import { BUILTIN_TEMPLATES } from "@/lib/templates/catalog";
 import {
   GallerySavedDesignCard,
@@ -13,6 +17,7 @@ import {
   isDesignCustomTemplate,
   toCustomTemplateId,
 } from "@/lib/types";
+import { readSharedTemplateFile } from "@/lib/templates/share-template";
 
 export function TemplatesPage() {
   const settings = useLiveQuery(() => db.settings.get("default"), []);
@@ -21,13 +26,65 @@ export function TemplatesPage() {
     [],
   );
   const savedDesigns = (customs ?? []).filter(isDesignCustomTemplate);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function onImportFile(file: File) {
+    setBusy(true);
+    setError("");
+    setStatus("");
+    try {
+      const template = await readSharedTemplateFile(file);
+      await importSharedTemplate(template);
+      setStatus(
+        `Imported “${template.name}” — layout only. Your business details stay yours.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not import template");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div>
       <PageHeader
         title="Templates"
-        subtitle="Built-in looks plus designs you save from an invoice. Press Save on a draft to add it here."
+        subtitle="Save a look from an invoice, then share the file. Shared templates are layout only — no name, logo, client, or line items."
       />
+
+      <div className="mb-8 flex flex-wrap items-center gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json,.easyledger.json"
+          className="sr-only"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void onImportFile(file);
+          }}
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+        >
+          Import template
+        </Button>
+        <p className="text-xs text-[var(--muted)]">
+          Accepts an Easy Ledger `.json` share file
+        </p>
+      </div>
+
+      {(status || error) && (
+        <p className={`mb-6 text-sm ${error ? "text-red-700" : "text-teal-800"}`}>
+          {error || status}
+        </p>
+      )}
 
       {savedDesigns.length ? (
         <section className="mb-10">

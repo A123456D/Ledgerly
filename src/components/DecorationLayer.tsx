@@ -13,6 +13,7 @@ import {
   isImageDecoration,
   isLogoDecoration,
 } from "@/lib/decorations/logo-decoration";
+import { isBusinessNameDecoration } from "@/lib/decorations/business-name-decoration";
 import { ShapeSvg } from "@/lib/shapes/render";
 
 export interface DecorationEditContextValue {
@@ -30,6 +31,7 @@ export const DecorationEditContext =
 export interface DecorationMediaContextValue {
   logoSrc?: string;
   logoName: string;
+  businessName?: string;
   logoAccent: string;
 }
 
@@ -47,6 +49,33 @@ type DragMode = "move" | "resize-se" | "resize-sw" | "resize-ne" | "resize-nw";
 
 function DecorationContent({ decoration }: { decoration: InvoiceDecoration }) {
   const media = useContext(DecorationMediaContext);
+
+  if (isBusinessNameDecoration(decoration)) {
+    const label = (media.businessName || "").trim() || "Your business";
+    const linesGuess = Math.max(
+      1,
+      Math.ceil(label.length / Math.max(10, decoration.w * 0.7)),
+    );
+    const fontPx = Math.max(
+      11,
+      Math.min(32, (decoration.h / Math.min(linesGuess, 4)) * 3.8),
+    );
+    return (
+      <div
+        className="flex h-full w-full items-start font-[family-name:var(--font-display)] tracking-tight"
+        style={{
+          color: decoration.fill || "#1c1917",
+          opacity: decoration.opacity,
+          fontWeight: decoration.fontWeight ?? "bold",
+          fontSize: `${fontPx}px`,
+        }}
+      >
+        <span className="block w-full whitespace-normal break-words leading-snug [overflow-wrap:anywhere]">
+          {label}
+        </span>
+      </div>
+    );
+  }
 
   if (isLogoDecoration(decoration)) {
     const src = decoration.imageDataUrl || media.logoSrc;
@@ -100,7 +129,7 @@ function DecorationContent({ decoration }: { decoration: InvoiceDecoration }) {
   if (decoration.shapeId === "text-block") {
     return (
       <div
-        className="flex h-full w-full items-center justify-center overflow-hidden px-1 text-center leading-tight"
+        className="flex h-full w-full items-start justify-start overflow-visible px-1 text-left leading-snug"
         style={{
           color: decoration.fill,
           opacity: decoration.opacity,
@@ -108,7 +137,9 @@ function DecorationContent({ decoration }: { decoration: InvoiceDecoration }) {
           fontWeight: decoration.fontWeight ?? "bold",
         }}
       >
-        {decoration.text || "Text"}
+        <span className="block w-full whitespace-normal break-words [overflow-wrap:anywhere]">
+          {decoration.text || "Text"}
+        </span>
       </div>
     );
   }

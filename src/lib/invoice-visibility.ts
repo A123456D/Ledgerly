@@ -6,6 +6,7 @@ export type InvoiceVisibleField =
   | "from"
   | "billTo"
   | "logo"
+  | "businessName"
   | "notes"
   | "payment"
   | "vat"
@@ -22,6 +23,7 @@ export const DEFAULT_INVOICE_VISIBILITY: ResolvedInvoiceVisibility = {
   from: true,
   billTo: true,
   logo: true,
+  businessName: true,
   notes: true,
   payment: true,
   vat: true,
@@ -38,6 +40,7 @@ export const INVOICE_VISIBILITY_OPTIONS: {
   { key: "from", label: "From" },
   { key: "billTo", label: "Bill to" },
   { key: "logo", label: "Logo" },
+  { key: "businessName", label: "Business name" },
   { key: "vat", label: "VAT" },
   { key: "subtotal", label: "Subtotal" },
   { key: "notes", label: "Notes" },

@@ -59,10 +59,22 @@ import {
   syncLogoDecoration,
 } from "@/lib/decorations/logo-decoration";
 import {
+  createBusinessNameDecoration,
+  defaultBusinessNameFill,
+  findBusinessNameDecorations,
+  isBusinessNameDecoration,
+} from "@/lib/decorations/business-name-decoration";
+import {
+  identityDecorationsUnchanged,
+  syncIdentityDecorations,
+} from "@/lib/decorations/identity-layers";
+import {
   designTemplateToInvoicePatch,
   getCustomTemplate,
   saveInvoiceDesignTemplate,
+  saveNamedDesignTemplate,
 } from "@/lib/custom-templates";
+import { shareDesignTemplate } from "@/lib/templates/share-template";
 import { isCustomTemplateId } from "@/lib/types";
 import {
   documentHref,
@@ -96,7 +108,26 @@ export function InvoiceEditor({ id }: { id: string }) {
   );
 
   useEffect(() => {
-    if (stored) setInvoice(stored);
+    if (!stored) return;
+    if (stored.status !== "draft") {
+      setInvoice(stored);
+      return;
+    }
+    const vis = resolveVisibility(stored.visibility);
+    const baseId = isBuiltinTemplateId(stored.templateId)
+      ? stored.templateId
+      : undefined;
+    const decorations = syncIdentityDecorations(stored.decorations, {
+      accent: stored.accentColor,
+      logoVisible: vis.logo,
+      nameVisible: vis.businessName,
+      nameFill: defaultBusinessNameFill(baseId),
+    });
+    if (identityDecorationsUnchanged(stored.decorations, decorations)) {
+      setInvoice(stored);
+      return;
+    }
+    setInvoice({ ...stored, decorations });
   }, [stored]);
 
   const refreshPreview = useCallback(async (inv: Invoice) => {
@@ -166,6 +197,17 @@ export function InvoiceEditor({ id }: { id: string }) {
         accent: invoice!.accentColor,
         logoVisible: nextVis,
         imageDataUrl: logoSrc,
+      });
+    }
+    if (key === "businessName") {
+      const baseId = isBuiltinTemplateId(invoice!.templateId)
+        ? invoice!.templateId
+        : undefined;
+      patch.decorations = syncIdentityDecorations(invoice!.decorations, {
+        accent: invoice!.accentColor,
+        logoVisible: resolveVisibility(invoice!.visibility).logo,
+        nameVisible: nextVis,
+        nameFill: defaultBusinessNameFill(baseId),
       });
     }
     update(patch);
@@ -265,6 +307,13 @@ export function InvoiceEditor({ id }: { id: string }) {
         logo: true,
       };
     }
+    if (isBusinessNameDecoration(decoration)) {
+      patch.visibility = {
+        ...resolveVisibility(invoice.visibility),
+        ...(patch.visibility ?? {}),
+        businessName: true,
+      };
+    }
     update(patch);
     setSelectedDecorationId(decoration.id);
     setDesignMode(true);
@@ -287,6 +336,17 @@ export function InvoiceEditor({ id }: { id: string }) {
       patch.visibility = {
         ...resolveVisibility(invoice.visibility),
         logo: false,
+      };
+    }
+    if (
+      target &&
+      isBusinessNameDecoration(target) &&
+      !next.some(isBusinessNameDecoration)
+    ) {
+      patch.visibility = {
+        ...resolveVisibility(invoice.visibility),
+        ...(patch.visibility ?? {}),
+        businessName: false,
       };
     }
     update(patch);
@@ -416,6 +476,7 @@ export function InvoiceEditor({ id }: { id: string }) {
     try {
       const saved = await saveInvoice(current);
       const issued = await issueInvoice(saved.id);
+      await saveInvoiceDesignTemplate(saved);
       setInvoice(issued);
       setMessage(
         issued.clientId
@@ -424,6 +485,54 @@ export function InvoiceEditor({ id }: { id: string }) {
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Issue failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSaveAsTemplate() {
+    if (!invoice || locked) return;
+    const suggested = invoice.templateId.startsWith("custom:")
+      ? "My layout"
+      : "My invoice look";
+    const name = window.prompt("Name this template", suggested);
+    if (name === null) return;
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await saveInvoice(invoice);
+      const { clientCreated: _c, ...storedInv } = saved;
+      setInvoice(storedInv);
+      const design = await saveNamedDesignTemplate(storedInv, name);
+      setMessage(`Template “${design.name}” saved — layout only, not your invoice details`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save template");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onShareTemplate() {
+    if (!invoice || locked) return;
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await saveInvoice(invoice);
+      const { clientCreated: _c, ...storedInv } = saved;
+      setInvoice(storedInv);
+      const design = await saveInvoiceDesignTemplate(storedInv);
+      const result = await shareDesignTemplate(design);
+      setMessage(
+        result === "shared"
+          ? "Template shared — the file has layout only, not your business or client details"
+          : "Template file downloaded — share that file. It has layout only, not your details",
+      );
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setMessage("");
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Could not share template");
     } finally {
       setBusy(false);
     }
@@ -559,6 +668,22 @@ export function InvoiceEditor({ id }: { id: string }) {
               </Button>
               <Button className="shrink-0" onClick={onIssue} disabled={busy}>
                 {quoteDoc ? "Send quote" : "Issue"}
+              </Button>
+              <Button
+                variant="ghost"
+                className="shrink-0"
+                onClick={() => void onSaveAsTemplate()}
+                disabled={busy}
+              >
+                Save as template
+              </Button>
+              <Button
+                variant="ghost"
+                className="shrink-0"
+                onClick={() => void onShareTemplate()}
+                disabled={busy}
+              >
+                Share template
               </Button>
               <Button
                 variant="danger"
@@ -894,7 +1019,7 @@ export function InvoiceEditor({ id }: { id: string }) {
               </div>
 
               <div className="divide-y divide-[var(--line)]">
-                {invoice.lineItems.map((line, index) => {
+                {invoice.lineItems.map((line) => {
                   const lineAmount =
                     line.quantity *
                     line.unitPrice *
@@ -908,23 +1033,14 @@ export function InvoiceEditor({ id }: { id: string }) {
                         <label className="mb-1 block text-xs font-medium text-[var(--muted)] lg:sr-only">
                           Description
                         </label>
-                        <input
-                          className={inputClass}
+                        <textarea
+                          className={`${inputClass} min-h-[2.75rem] resize-y leading-snug`}
+                          rows={2}
                           placeholder="What are you billing for?"
                           value={line.description}
                           onChange={(e) =>
                             updateLine(line.id, { description: e.target.value })
                           }
-                          onKeyDown={(e) => {
-                            if (
-                              e.key === "Enter" &&
-                              index === invoice.lineItems.length - 1 &&
-                              line.description.trim()
-                            ) {
-                              e.preventDefault();
-                              addLine();
-                            }
-                          }}
                         />
                       </div>
 
@@ -1134,11 +1250,15 @@ export function InvoiceEditor({ id }: { id: string }) {
                       invoice.accentColor,
                     );
                     const keptLogos = findLogoDecorations(invoice.decorations);
+                    const keptNames = findBusinessNameDecorations(
+                      invoice.decorations,
+                    );
                     const keptImages = (invoice.decorations ?? []).filter(
                       (d) => !isLogoDecoration(d) && d.shapeId === "image",
                     );
                     const packageShapes = design.decorations.filter(
-                      (d) => !isLogoDecoration(d),
+                      (d) =>
+                        !isLogoDecoration(d) && !isBusinessNameDecoration(d),
                     );
                     const decorations = [
                       ...packageShapes,
@@ -1157,6 +1277,15 @@ export function InvoiceEditor({ id }: { id: string }) {
                                           null,
                                     )
                                   : undefined,
+                              }),
+                            ]
+                          : []),
+                      ...(keptNames.length
+                        ? keptNames
+                        : vis.businessName
+                          ? [
+                              createBusinessNameDecoration({
+                                fill: defaultBusinessNameFill(id),
                               }),
                             ]
                           : []),
@@ -1208,8 +1337,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                 />
               </div>
               <p className="mt-2 text-xs text-[var(--muted)]">
-                Templates use clean layouts. Tap sections on the preview to edit content, or use Design
-                studio to upload images and add shapes.
+                Templates use clean layouts. Drag the logo and business name on the preview so they never cover each other. Save as template to reuse the look — sharing never includes your details.
               </p>
             </div>
 
@@ -1242,14 +1370,13 @@ export function InvoiceEditor({ id }: { id: string }) {
                 onReorder={reorderDecoration}
                 onClearAll={() => {
                   const logos = findLogoDecorations(invoice.decorations);
+                  const names = findBusinessNameDecorations(invoice.decorations);
                   const images = (invoice.decorations ?? []).filter(
                     isImageDecoration,
                   );
+                  const keep = [...logos, ...names, ...images];
                   update({
-                    decorations:
-                      logos.length || images.length
-                        ? [...logos, ...images]
-                        : undefined,
+                    decorations: keep.length ? keep : undefined,
                   });
                   setSelectedDecorationId(null);
                 }}

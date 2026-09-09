@@ -120,6 +120,40 @@ export async function saveInvoiceDesignTemplate(
   return template;
 }
 
+/** Save a named gallery card that is not tied to one invoice id. */
+export async function saveNamedDesignTemplate(
+  invoice: Invoice,
+  name: string,
+): Promise<CustomTemplate> {
+  const trimmed = name.trim().slice(0, 80);
+  if (!trimmed) throw new Error("Give the template a name");
+  const baseTemplateId = await resolveBaseTemplateId(invoice);
+  const template: CustomTemplate = {
+    id: uid("tmpl"),
+    name: trimmed,
+    source: "design",
+    accentColor: invoice.accentColor,
+    baseTemplateId,
+    fontPair: invoice.fontPair,
+    sectionAccents: invoice.sectionAccents
+      ? { ...invoice.sectionAccents }
+      : undefined,
+    decorations: invoice.decorations?.map((d) => ({ ...d })),
+    logoSizePx: invoice.logoSizePx,
+    visibility: invoice.visibility ? { ...invoice.visibility } : undefined,
+    createdAt: new Date().toISOString(),
+  };
+  await db.customTemplates.put(template);
+  return template;
+}
+
+export async function importSharedTemplate(
+  template: CustomTemplate,
+): Promise<CustomTemplate> {
+  await db.customTemplates.put(template);
+  return template;
+}
+
 /** Patch fields to apply a saved design template onto an invoice. */
 export function designTemplateToInvoicePatch(
   template: CustomTemplate,

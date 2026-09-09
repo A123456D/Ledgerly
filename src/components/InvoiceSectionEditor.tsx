@@ -215,12 +215,17 @@ export function InvoiceSectionEditor({
         {(section === "from" || section === "header") && business ? (
           <>
             <Field label="Business name">
-              <input
-                className={inputClass}
+              <textarea
+                className={`${inputClass} min-h-[2.75rem] resize-y leading-snug`}
+                rows={2}
                 value={business.name}
                 onChange={(e) => onUpdateBusiness({ name: e.target.value })}
               />
             </Field>
+            <p className="text-[11px] text-[var(--muted)]">
+              Drag the name on the invoice to move it off the logo. The text
+              always comes from this field — templates never copy it.
+            </p>
             <Field label="Email">
               <input
                 className={inputClass}

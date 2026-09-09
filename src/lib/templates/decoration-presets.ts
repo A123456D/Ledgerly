@@ -2,10 +2,14 @@ import type { BuiltinTemplateId, InvoiceDecoration } from "@/lib/types";
 import { uid } from "@/lib/format";
 import { getBuiltinTemplate } from "@/lib/templates/catalog";
 import { createLogoDecoration } from "@/lib/decorations/logo-decoration";
+import {
+  createBusinessNameDecoration,
+  defaultBusinessNameFill,
+} from "@/lib/decorations/business-name-decoration";
 
 /**
  * Built-in templates own their layout in CSS.
- * Presets only add a movable logo layer — no random blobs/frames that fight the design.
+ * Presets add a movable logo and business-name layer — no random blobs/frames.
  * Users can still add shapes/images from Design studio.
  */
 export interface TemplateDesignPackage {
@@ -20,7 +24,12 @@ export function buildTemplateDecorations(
 ): InvoiceDecoration[] {
   const meta = getBuiltinTemplate(templateId);
   const color = accent ?? meta?.defaultAccent ?? "#0f766e";
-  return [createLogoDecoration(color)];
+  return [
+    createLogoDecoration(color),
+    createBusinessNameDecoration({
+      fill: defaultBusinessNameFill(templateId),
+    }),
+  ];
 }
 
 export function getTemplateDesignPackage(

@@ -25,6 +25,9 @@ import {
   isBuiltinTemplateIdForDesign,
 } from "./templates/decoration-presets";
 import { resolveLogoDataUrl, normalizeBusinessLogos } from "./logos";
+import { resolveVisibility } from "./invoice-visibility";
+import { defaultBusinessNameFill } from "./decorations/business-name-decoration";
+import { syncIdentityDecorations } from "./decorations/identity-layers";
 
 export function emptyLine(taxRate = 0): LineItem {
   return {
@@ -586,6 +589,31 @@ export async function displayDocumentLive(
   const designDecorations =
     customTemplate?.source === "design" ? customTemplate.decorations : undefined;
 
+  const vis = resolveVisibility(invoice.visibility);
+  const layoutId = isBuiltinTemplateId(invoice.templateId)
+    ? invoice.templateId
+    : customTemplate?.source === "design" && customTemplate.baseTemplateId
+      ? customTemplate.baseTemplateId
+      : undefined;
+
+  let decorations =
+    invoice.decorations?.length
+      ? invoice.decorations
+      : designDecorations?.length
+        ? designDecorations
+        : layoutId
+          ? buildTemplateDecorations(layoutId, accent)
+          : undefined;
+
+  if (invoice.status === "draft") {
+    decorations = syncIdentityDecorations(decorations, {
+      accent,
+      logoVisible: vis.logo,
+      nameVisible: vis.businessName,
+      nameFill: defaultBusinessNameFill(layoutId),
+    });
+  }
+
   return {
     kind: documentKind(invoice.kind),
     number: peek,
@@ -608,15 +636,6 @@ export async function displayDocumentLive(
     visibility: invoice.visibility,
     customTemplate,
     sectionAccents: invoice.sectionAccents,
-    decorations:
-      invoice.decorations?.length
-        ? invoice.decorations
-        : designDecorations?.length
-          ? designDecorations
-          : isBuiltinTemplateId(invoice.templateId)
-            ? buildTemplateDecorations(invoice.templateId, accent)
-            : customTemplate?.source === "design" && customTemplate.baseTemplateId
-              ? buildTemplateDecorations(customTemplate.baseTemplateId, accent)
-              : undefined,
+    decorations,
   };
 }

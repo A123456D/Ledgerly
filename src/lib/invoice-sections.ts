@@ -9,7 +9,7 @@ export const INVOICE_SECTIONS: {
   {
     id: "header",
     label: "Header & business",
-    hint: "Your name and contact shown at the top",
+    hint: "Drag your name on the page so it does not sit under the logo",
     editAnchor: "edit-section-header",
   },
   {

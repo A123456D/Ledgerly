@@ -14,6 +14,7 @@ import {
   type CustomTemplate,
 } from "@/lib/types";
 import { InvoicePreview, type InvoiceViewModel } from "@/templates/InvoicePreview";
+import { shareDesignTemplate } from "@/lib/templates/share-template";
 
 const SAMPLE_LINE_ITEMS: InvoiceViewModel["lineItems"] = [
   {
@@ -291,9 +292,25 @@ export function GallerySavedDesignCard({
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [shareNote, setShareNote] = useState("");
   const doc = useMemo(() => sampleDocFromDesign(template), [template]);
   const tid = toCustomTemplateId(template.id);
   if (!doc || !isDesignCustomTemplate(template)) return null;
+
+  async function onShare() {
+    setShareNote("");
+    try {
+      const result = await shareDesignTemplate(template);
+      setShareNote(
+        result === "shared"
+          ? "Shared — file has layout only, not your details"
+          : "Downloaded — file has layout only, not your details",
+      );
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setShareNote(err instanceof Error ? err.message : "Could not share");
+    }
+  }
 
   return (
     <>
@@ -319,14 +336,20 @@ export function GallerySavedDesignCard({
             ) : null}
           </div>
           <p className="text-xs text-[var(--muted)]">
-            Your design — layout, colours, and shapes from a saved invoice.
+            Layout, colours, and placement — not your business name, logo file, or invoice lines.
           </p>
+          {shareNote ? (
+            <p className="text-[11px] text-teal-800">{shareNote}</p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
               Preview
             </Button>
             <Button type="button" variant="ghost" onClick={onSetDefault}>
               Set default
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => void onShare()}>
+              Share
             </Button>
             <Button
               type="button"
