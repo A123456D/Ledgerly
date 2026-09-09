@@ -122,7 +122,7 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
 
       {needsSetup ? (
         <div className="mb-6 rounded-xl border border-teal-200 bg-teal-50/80 px-4 py-3 text-sm text-teal-950">
-          Set your business profile first for correct tax IDs and branding.{" "}
+          Finish your business profile (name, address, VAT No.) so Tax Invoices stay SARS-ready.{" "}
           <Link href="/settings" className="font-medium underline">
             Open settings
           </Link>
@@ -158,10 +158,10 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
           <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">
             {kind === "quote"
               ? "Start a draft quote, set the number if you need a specific one, send it, then convert it to an invoice when accepted."
-              : "Start a draft, pick a template, and issue when you\u2019re ready. You can type the number or leave it blank to auto-assign."}
+              : "Pick a template, add a client, enter lines, then send."}
           </p>
           <Button className="mt-6" onClick={onNew} disabled={busy}>
-            Create your first {nounLower}
+            {kind === "quote" ? `Create your first ${nounLower}` : "Create your first SARS-ready invoice"}
           </Button>
         </div>
       ) : isInvoice && filter !== "all" && filtered.length === 0 ? (
