@@ -1,3 +1,4 @@
+import { todayISO } from "@/lib/format";
 import type { DocKind } from "@/lib/types";
 
 export function isQuote(kind?: DocKind | null): boolean {
@@ -36,12 +37,25 @@ export function documentListHref(kind?: DocKind | null): string {
   return isQuote(kind) ? "/quotes" : "/";
 }
 
-export function statusDisplay(
-  status: string,
-  kind?: DocKind | null,
-): string {
-  if (isQuote(kind) && status === "issued") return "Sent";
+export function statusDisplay(status: string): string {
+  if (status === "issued") return "Sent";
+  if (status === "partial") return "Partial";
   return status;
+}
+
+/**
+ * Returns true when an invoice (not quote) is past its due date and still
+ * unpaid/partially paid. Overdue is derived — not stored.
+ */
+export function isOverdue(
+  status: string,
+  dueDate: string | undefined,
+  kind?: DocKind | null,
+): boolean {
+  if (isQuote(kind)) return false;
+  if (status !== "issued" && status !== "partial") return false;
+  if (!dueDate) return false;
+  return dueDate < todayISO();
 }
 
 export function mapIssuePrefix(

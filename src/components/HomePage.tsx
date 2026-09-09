@@ -8,12 +8,36 @@ import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/format";
 import { createDraftInvoice, deleteDraftInvoice, duplicateInvoice } from "@/lib/invoice-service";
 import { Button, PageHeader, StatusPill } from "@/components/ui";
-import type { DocKind } from "@/lib/types";
+import type { DocKind, Invoice } from "@/lib/types";
 import {
   documentHref,
   documentKind,
   documentNounLower,
+  isOverdue,
 } from "@/lib/document-kind";
+
+type InvoiceFilter = "all" | "draft" | "sent" | "partial" | "paid" | "overdue";
+
+function matchesFilter(inv: Invoice, filter: InvoiceFilter): boolean {
+  const over = isOverdue(inv.status, inv.dueDate);
+  switch (filter) {
+    case "all": return true;
+    case "draft": return inv.status === "draft";
+    case "sent": return inv.status === "issued" && !over;
+    case "partial": return inv.status === "partial" && !over;
+    case "paid": return inv.status === "paid";
+    case "overdue": return over;
+  }
+}
+
+const INVOICE_FILTERS: { id: InvoiceFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "draft", label: "Draft" },
+  { id: "sent", label: "Sent" },
+  { id: "partial", label: "Partial" },
+  { id: "paid", label: "Paid" },
+  { id: "overdue", label: "Overdue" },
+];
 
 export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
   const router = useRouter();
@@ -27,7 +51,15 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
   );
   const business = useLiveQuery(() => db.business.get("default"), []);
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<InvoiceFilter>("all");
   const nounLower = documentNounLower(kind);
+  const isInvoice = kind === "invoice";
+
+  const filtered = useMemo(() => {
+    if (!documents) return documents;
+    if (!isInvoice || filter === "all") return documents;
+    return documents.filter((inv) => matchesFilter(inv, filter));
+  }, [documents, filter, isInvoice]);
 
   const needsSetup = business && !business.name.trim();
 
@@ -97,9 +129,28 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
         </div>
       ) : null}
 
-      {!documents ? (
+      {isInvoice && documents && documents.length > 0 ? (
+        <div className="-mx-1 mb-4 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          {INVOICE_FILTERS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setFilter(id)}
+              className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
+                filter === id
+                  ? "bg-[var(--accent)] text-white"
+                  : "bg-[var(--wash)] text-[var(--muted)] hover:bg-[var(--line)]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {!filtered ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
-      ) : documents.length === 0 ? (
+      ) : filtered.length === 0 && (!isInvoice || filter === "all") ? (
         <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--panel)]/60 px-4 py-12 text-center sm:px-6 sm:py-16">
           <p className="font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
             No {kind === "quote" ? "quotes" : "invoices"} yet
@@ -113,10 +164,23 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
             Create your first {nounLower}
           </Button>
         </div>
+      ) : isInvoice && filter !== "all" && filtered.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--panel)]/60 px-4 py-10 text-center sm:px-6 sm:py-12">
+          <p className="text-sm text-[var(--muted)]">
+            No {INVOICE_FILTERS.find((f) => f.id === filter)?.label.toLowerCase()} invoices
+          </p>
+          <button
+            type="button"
+            className="mt-2 text-xs text-[var(--accent)] underline-offset-2 hover:underline"
+            onClick={() => setFilter("all")}
+          >
+            Clear filter
+          </button>
+        </div>
       ) : (
         <>
           <div className="space-y-3 md:hidden">
-            {documents.map((inv) => (
+            {filtered!.map((inv) => (
               <div
                 key={inv.id}
                 className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4"
@@ -133,7 +197,7 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
                       {inv.client.name || "No client"}
                     </p>
                   </div>
-                  <StatusPill status={inv.status} kind={inv.kind} />
+                  <StatusPill status={inv.status} kind={inv.kind} dueDate={inv.dueDate} />
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2 text-sm">
                   <span className="text-[var(--muted)]">{formatDate(inv.issueDate)}</span>
@@ -171,7 +235,7 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
                 </tr>
               </thead>
               <tbody>
-                {documents.map((inv) => (
+                {filtered!.map((inv) => (
                   <tr
                     key={inv.id}
                     className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--wash)]/80"
@@ -188,7 +252,7 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
                       {inv.client.name || "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusPill status={inv.status} kind={inv.kind} />
+                      <StatusPill status={inv.status} kind={inv.kind} dueDate={inv.dueDate} />
                     </td>
                     <td className="px-4 py-3 text-[var(--muted)]">
                       {formatDate(inv.issueDate)}
