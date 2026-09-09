@@ -10,15 +10,32 @@ import {
   InvoicePreview,
   type InvoiceViewModel,
 } from "@/templates/InvoicePreview";
-
-const A4_W_MM = 210;
-const A4_H_MM = 297;
-const PX_PER_MM = 96 / 25.4;
-const A4_W_PX = Math.round(A4_W_MM * PX_PER_MM);
-const A4_H_PX = Math.round(A4_H_MM * PX_PER_MM);
+import { fillLogoImages } from "@/lib/decorations/logo-decoration";
+import {
+  A4_HEIGHT_MM,
+  A4_HEIGHT_PX,
+  A4_WIDTH_MM,
+  A4_WIDTH_PX,
+  captureSheetHeightPx,
+  pdfRasterPageCount,
+} from "@/lib/sheet-size";
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function screenshotScale() {
+  const dpr =
+    typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  return 2 / dpr;
+}
+
+function hydrateDoc(doc: InvoiceViewModel): InvoiceViewModel {
+  const src = doc.logoDataUrl || doc.business.logoDataUrl;
+  return {
+    ...doc,
+    decorations: fillLogoImages(doc.decorations, src),
+  };
 }
 
 async function waitForImages(root: HTMLElement) {
@@ -46,38 +63,59 @@ function pngToPdfBlob(dataUrl: string): Blob {
   });
 
   const props = pdf.getImageProperties(dataUrl);
-  const imgW = A4_W_MM;
+  const imgW = A4_WIDTH_MM;
   const imgH = (props.height * imgW) / props.width;
+  const pages = pdfRasterPageCount(imgH);
 
-  let heightLeft = imgH;
-  let position = 0;
-
-  pdf.addImage(dataUrl, "PNG", 0, position, imgW, imgH, undefined, "FAST");
-  heightLeft -= A4_H_MM;
-
-  while (heightLeft > 1) {
-    position -= A4_H_MM;
-    pdf.addPage();
+  for (let i = 0; i < pages; i++) {
+    if (i > 0) pdf.addPage();
+    const position = -i * A4_HEIGHT_MM;
     pdf.addImage(dataUrl, "PNG", 0, position, imgW, imgH, undefined, "FAST");
-    heightLeft -= A4_H_MM;
   }
 
   return pdf.output("blob");
 }
 
-async function captureNode(node: HTMLElement): Promise<string> {
-  const width = Math.max(node.scrollWidth, node.offsetWidth, A4_W_PX);
-  const height = Math.max(node.scrollHeight, node.offsetHeight, A4_H_PX);
+function measureInkHeight(sheet: HTMLElement): number {
+  const sheetTop = sheet.getBoundingClientRect().top;
+  const content = sheet.querySelector<HTMLElement>("[data-invoice-content]");
+  let bottom = content
+    ? content.getBoundingClientRect().bottom - sheetTop
+    : Math.max(sheet.scrollHeight, sheet.offsetHeight);
+
+  sheet.querySelectorAll<HTMLElement>("[data-invoice-decoration]").forEach((el) => {
+    const b = el.getBoundingClientRect().bottom - sheetTop;
+    if (b > bottom) bottom = b;
+  });
+
+  return Math.max(bottom, content?.offsetHeight ?? 0, A4_HEIGHT_PX * 0.5);
+}
+
+function prepareSheetForCapture(sheet: HTMLElement) {
+  sheet.style.boxShadow = "none";
+  sheet.style.transform = "none";
+  sheet.style.width = `${A4_WIDTH_PX}px`;
+  sheet.style.maxWidth = `${A4_WIDTH_PX}px`;
+  sheet.style.minHeight = `${A4_HEIGHT_PX}px`;
+  sheet.style.margin = "0";
+  sheet.style.opacity = "1";
+}
+
+async function captureNode(node: HTMLElement, heightPx: number): Promise<string> {
+  node.style.height = `${heightPx}px`;
+  node.style.maxHeight = `${heightPx}px`;
+  node.style.overflow = "hidden";
 
   return domToPng(node, {
-    width,
-    height,
-    scale: 2,
+    width: A4_WIDTH_PX,
+    height: heightPx,
+    scale: screenshotScale(),
     backgroundColor: "#ffffff",
     style: {
       transform: "none",
       boxShadow: "none",
       backfaceVisibility: "visible",
+      opacity: "1",
     },
     filter: (el) => {
       if (!(el instanceof Element)) return true;
@@ -86,80 +124,60 @@ async function captureNode(node: HTMLElement): Promise<string> {
   });
 }
 
-/**
- * Clone the live editor preview (exact DOM you see) into a 1:1 A4 host and
- * screenshot it — this is what makes PDF/WhatsApp match the template.
- */
+/** Keep the sheet in the viewport so images actually paint into the screenshot. */
+function captureHost(): HTMLDivElement {
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  host.style.cssText = [
+    "position:fixed",
+    "left:0",
+    "top:0",
+    `width:${A4_WIDTH_PX}px`,
+    "z-index:2147483646",
+    "background:#fff",
+    "opacity:1",
+    "pointer-events:none",
+  ].join(";");
+  return host;
+}
+
 async function captureLivePreviewSheet(): Promise<Blob | null> {
   const live = document.querySelector<HTMLElement>(
     "[data-invoice-preview-root] [data-invoice-sheet]",
   );
   if (!live) return null;
 
-  const host = document.createElement("div");
-  host.setAttribute("aria-hidden", "true");
-  host.style.cssText = [
-    "position:fixed",
-    "inset:0",
-    "z-index:2147483646",
-    "display:flex",
-    "align-items:flex-start",
-    "justify-content:center",
-    "background:#fff",
-    "overflow:auto",
-    "opacity:0",
-    "pointer-events:none",
-  ].join(";");
-
+  const host = captureHost();
   const frame = document.createElement("div");
-  frame.style.cssText = `width:${A4_W_PX}px;min-height:${A4_H_PX}px;background:#fff;`;
+  frame.style.cssText = `width:${A4_WIDTH_PX}px;min-height:${A4_HEIGHT_PX}px;background:#fff;`;
   host.appendChild(frame);
   document.body.appendChild(host);
 
   try {
     const clone = live.cloneNode(true) as HTMLElement;
-    clone.style.boxShadow = "none";
-    clone.style.transform = "none";
-    clone.style.width = `${A4_W_PX}px`;
-    clone.style.maxWidth = `${A4_W_PX}px`;
-    clone.style.minHeight = `${A4_H_PX}px`;
-    clone.style.margin = "0";
+    prepareSheetForCapture(clone);
     frame.appendChild(clone);
 
     await waitForImages(clone);
     await document.fonts?.ready;
     await sleep(80);
 
-    applySmartPageBreaks(clone, A4_H_PX);
+    applySmartPageBreaks(clone, A4_HEIGHT_PX);
     stripSectionEditChrome(clone);
     await sleep(40);
 
-    const dataUrl = await captureNode(clone);
+    const height = captureSheetHeightPx(measureInkHeight(clone));
+    const dataUrl = await captureNode(clone, height);
     return pngToPdfBlob(dataUrl);
   } finally {
     host.remove();
   }
 }
 
-/** Remount template off-screen when the live preview isn’t on the page. */
 async function captureRemountedPreview(doc: InvoiceViewModel): Promise<Blob> {
-  const host = document.createElement("div");
-  host.setAttribute("aria-hidden", "true");
-  host.style.cssText = [
-    "position:fixed",
-    "inset:0",
-    "z-index:2147483646",
-    "display:flex",
-    "align-items:flex-start",
-    "justify-content:center",
-    "background:#fff",
-    "overflow:auto",
-    "opacity:0",
-    "pointer-events:none",
-  ].join(";");
-
+  const host = captureHost();
   const mount = document.createElement("div");
-  mount.style.cssText = `width:${A4_W_PX}px;background:#fff;`;
+  mount.style.cssText = `width:${A4_WIDTH_PX}px;background:#fff;`;
   host.appendChild(mount);
   document.body.appendChild(host);
 
@@ -167,7 +185,7 @@ async function captureRemountedPreview(doc: InvoiceViewModel): Promise<Blob> {
 
   try {
     flushSync(() => {
-      root.render(<InvoicePreview doc={doc} />);
+      root.render(<InvoicePreview doc={hydrateDoc(doc)} />);
     });
 
     await document.fonts?.ready;
@@ -180,16 +198,13 @@ async function captureRemountedPreview(doc: InvoiceViewModel): Promise<Blob> {
 
     if (!sheet) throw new Error("Invoice preview failed to render for PDF");
 
-    sheet.style.boxShadow = "none";
-    sheet.style.width = `${A4_W_PX}px`;
-    sheet.style.maxWidth = `${A4_W_PX}px`;
-    sheet.style.minHeight = `${A4_H_PX}px`;
-
-    applySmartPageBreaks(sheet, A4_H_PX);
+    prepareSheetForCapture(sheet);
+    applySmartPageBreaks(sheet, A4_HEIGHT_PX);
     stripSectionEditChrome(sheet);
     await sleep(40);
 
-    const dataUrl = await captureNode(sheet);
+    const height = captureSheetHeightPx(measureInkHeight(sheet));
+    const dataUrl = await captureNode(sheet, height);
     return pngToPdfBlob(dataUrl);
   } finally {
     root.unmount();
@@ -203,15 +218,9 @@ export async function buildPayslipPdfBlobFromPreview(): Promise<Blob> {
   return live;
 }
 
-/** Build a PDF that matches the on-screen template as closely as possible. */
+/** Remount at A4 so logos/shapes paint; do not screenshot the scaled editor clone. */
 export async function buildInvoicePdfBlobFromPreview(
   doc: InvoiceViewModel,
 ): Promise<Blob> {
-  try {
-    const live = await captureLivePreviewSheet();
-    if (live) return live;
-  } catch {
-    // fall through to remount
-  }
-  return captureRemountedPreview(doc);
+  return captureRemountedPreview(hydrateDoc(doc));
 }

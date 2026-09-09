@@ -122,13 +122,21 @@ export function InvoiceEditor({ id }: { id: string }) {
       logoVisible: vis.logo,
       nameVisible: vis.businessName,
       nameFill: defaultBusinessNameFill(baseId),
+      imageDataUrl: business
+        ? resolveLogoDataUrl(
+            business,
+            stored.logoId === null
+              ? null
+              : stored.logoId ?? business.defaultLogoId ?? null,
+          )
+        : undefined,
     });
     if (identityDecorationsUnchanged(stored.decorations, decorations)) {
       setInvoice(stored);
       return;
     }
     setInvoice({ ...stored, decorations });
-  }, [stored]);
+  }, [stored, business]);
 
   const refreshPreview = useCallback(async (inv: Invoice) => {
     const doc = await displayDocumentLive({
@@ -1306,7 +1314,18 @@ export function InvoiceEditor({ id }: { id: string }) {
                         update({ templateId: id });
                         return;
                       }
-                      const patch = designTemplateToInvoicePatch(custom);
+                      const patch = designTemplateToInvoicePatch(custom, {
+                        logoDataUrl: business
+                          ? resolveLogoDataUrl(
+                              business,
+                              invoice.logoId === null
+                                ? null
+                                : invoice.logoId ??
+                                  business.defaultLogoId ??
+                                  null,
+                            )
+                          : undefined,
+                      });
                       if (patch) {
                         update(patch);
                         setSelectedDecorationId(null);

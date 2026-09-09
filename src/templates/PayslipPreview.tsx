@@ -23,6 +23,7 @@ export function PayslipPreview({
       className="invoice-sheet invoice-gpu-layer bg-white text-[var(--ink)]"
       style={vars}
     >
+      <div data-invoice-content>
       <div className="flex items-start justify-between gap-6">
         <div className="flex min-w-0 items-start gap-4">
           {logoDataUrl ? (
@@ -143,6 +144,7 @@ export function PayslipPreview({
         This payslip is an estimate for your records. Tax and statutory amounts
         are entered by you — they are not a payroll filing.
       </p>
+      </div>
     </div>
   );
 }

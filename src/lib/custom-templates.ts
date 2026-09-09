@@ -8,8 +8,10 @@ import {
   type BuiltinTemplateId,
   type CustomTemplate,
   type Invoice,
+  type InvoiceDecoration,
   type TemplateId,
 } from "./types";
+import { fillLogoImages } from "./decorations/logo-decoration";
 
 export async function importCanvaTemplate(
   file: File,
@@ -157,8 +159,14 @@ export async function importSharedTemplate(
 /** Patch fields to apply a saved design template onto an invoice. */
 export function designTemplateToInvoicePatch(
   template: CustomTemplate,
+  options?: { logoDataUrl?: string | null },
 ): Partial<Invoice> | null {
   if (!isDesignCustomTemplate(template)) return null;
+  const decorations: InvoiceDecoration[] | undefined =
+    template.decorations?.map((d) => ({
+      ...d,
+      id: uid("deco"),
+    }));
   return {
     templateId: toCustomTemplateId(template.id),
     accentColor: template.accentColor,
@@ -166,10 +174,7 @@ export function designTemplateToInvoicePatch(
     sectionAccents: template.sectionAccents
       ? { ...template.sectionAccents }
       : undefined,
-    decorations: template.decorations?.map((d) => ({
-      ...d,
-      id: uid("deco"),
-    })),
+    decorations: fillLogoImages(decorations, options?.logoDataUrl),
     logoSizePx: template.logoSizePx,
     visibility: template.visibility ? { ...template.visibility } : undefined,
   };

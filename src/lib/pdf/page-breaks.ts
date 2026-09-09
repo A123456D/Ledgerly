@@ -47,7 +47,4 @@ export function applySmartPageBreaks(
 
     if (!moved) break;
   }
-
-  const pages = Math.max(1, Math.ceil(sheet.scrollHeight / pageHeightPx));
-  sheet.style.minHeight = `${pages * pageHeightPx}px`;
 }

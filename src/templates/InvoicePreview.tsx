@@ -25,6 +25,7 @@ import { fontPairCssVars } from "@/lib/fonts";
 import { clampLogoSizePx, DEFAULT_LOGO_SIZE_PX } from "@/lib/logo-size";
 import { DecorationLayer, DecorationMediaContext } from "@/components/DecorationLayer";
 import {
+  fillLogoImages,
   isLogoDecoration,
 } from "@/lib/decorations/logo-decoration";
 import { isBusinessNameDecoration } from "@/lib/decorations/business-name-decoration";
@@ -250,6 +251,28 @@ function Party({
         </p>
       ))}
     </div>
+  );
+}
+
+function HeaderEmail({
+  doc,
+  className = "",
+}: {
+  doc: InvoiceViewModel;
+  className?: string;
+}) {
+  const decorations = useContext(SheetDecorCtx);
+  if (
+    decorations.some(isBusinessNameDecoration) ||
+    decorations.some(isLogoDecoration)
+  ) {
+    return null;
+  }
+  if (!doc.business.email) return null;
+  return (
+    <p className={`break-words [overflow-wrap:anywhere] ${className}`}>
+      {doc.business.email}
+    </p>
   );
 }
 
@@ -592,7 +615,9 @@ function Sheet({
         <DecorationLayer decorations={back} sheetRef={sheetRef} behind />
       ) : null}
       {/* Content and decorations both stay clickable — never disable sections for shapes. */}
-      <div className="relative z-[1]">{children}</div>
+      <div className="relative z-[1]" data-invoice-content>
+        {children}
+      </div>
       {front.length > 0 ? (
         <DecorationLayer decorations={front} sheetRef={sheetRef} />
       ) : null}
@@ -619,7 +644,7 @@ function Classic({ doc, accent, logo }: Ctx) {
               className="font-[family-name:var(--font-display)] text-[1.75rem] font-semibold tracking-tight"
               fallback="Your business"
             />
-            <p className="mt-1 break-words text-sm opacity-55 [overflow-wrap:anywhere]">{doc.business.email}</p>
+            <HeaderEmail doc={doc} className="mt-1 text-sm opacity-55" />
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -936,7 +961,7 @@ function Coral({ doc, accent, logo }: Ctx) {
                 className="text-xl font-semibold"
                 fallback="Studio"
               />
-              <p className="text-xs opacity-50">{doc.business.email}</p>
+              <HeaderEmail doc={doc} className="text-xs opacity-50" />
             </div>
           </div>
           <EditableSection
@@ -1093,7 +1118,7 @@ function Meadow({ doc, accent, logo }: Ctx) {
               className="text-2xl font-semibold"
               fallback="Meadow"
             />
-            <p className="text-sm opacity-55">{doc.business.email}</p>
+            <HeaderEmail doc={doc} className="text-sm opacity-55" />
           </div>
         </div>
         <EditableSection section="reference" accent={accent} className="text-right">
@@ -1271,7 +1296,7 @@ function Harbor({ doc, accent, logo }: Ctx) {
                 className="text-2xl font-bold tracking-tight"
                 fallback="Harbor"
               />
-              <p className="text-xs text-white/65">{doc.business.email}</p>
+              <HeaderEmail doc={doc} className="text-xs text-white/65" />
             </div>
           </div>
           <EditableSection section="reference" accent={accent} tint={false} className="text-right">
@@ -1517,6 +1542,12 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
   if (!visibility.businessName) {
     decorations = decorations.filter((d) => !isBusinessNameDecoration(d));
   }
+  decorations = fillLogoImages(
+    decorations,
+    visibility.logo ? logo : undefined,
+  );
+
+  const logoOnCanvas = decorations.some(isLogoDecoration);
 
   const useCanva =
     Boolean(view.customTemplate?.backgroundDataUrl) &&
@@ -1530,8 +1561,8 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
 
   return (
     <LogoVisibleCtx.Provider value={visibility.logo}>
-      {/* Logos are decoration layers only — deleting them must not revive a fixed template logo. */}
-      <InlineLogoCtx.Provider value={false}>
+      {/* Identity lives on the canvas when a logo shape exists; otherwise the layout logo is used. */}
+      <InlineLogoCtx.Provider value={!logoOnCanvas}>
         <DecorationMediaContext.Provider
           value={{
             logoSrc: logo,

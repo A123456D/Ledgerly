@@ -44,6 +44,13 @@ canvas {
   max-width: 100%;
 }
 
+/* Logo / image shapes must keep the box the user drew, not shrink to the page. */
+[data-invoice-decoration] img,
+[data-invoice-decoration] svg {
+  max-width: none;
+  max-height: none;
+}
+
 input,
 select,
 textarea {

@@ -15,6 +15,13 @@ import {
 } from "@/lib/types";
 import { InvoicePreview, type InvoiceViewModel } from "@/templates/InvoicePreview";
 import { shareDesignTemplate } from "@/lib/templates/share-template";
+import { fillLogoImages } from "@/lib/decorations/logo-decoration";
+
+const SAMPLE_LOGO_DATA_URL =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0f766e"/><text x="32" y="42" text-anchor="middle" fill="white" font-size="26" font-family="system-ui,sans-serif" font-weight="700">N</text></svg>`,
+  );
 
 const SAMPLE_LINE_ITEMS: InvoiceViewModel["lineItems"] = [
   {
@@ -56,6 +63,7 @@ function sampleParties(): Pick<InvoiceViewModel, "business" | "client"> {
       postalCode: "8001",
       country: "South Africa",
       taxId: "4123456789",
+      logoDataUrl: SAMPLE_LOGO_DATA_URL,
     },
     client: {
       name: "Acme Retail (Pty) Ltd",
@@ -71,14 +79,16 @@ function sampleParties(): Pick<InvoiceViewModel, "business" | "client"> {
 
 export function sampleDoc(meta: TemplateMeta): InvoiceViewModel {
   const design = getTemplateDesignPackage(meta.id);
+  const parties = sampleParties();
   return {
     number: "INV-2026-0042",
-    ...sampleParties(),
+    ...parties,
     currency: "ZAR",
     taxMode: "exclusive",
     templateId: meta.id,
     accentColor: design.accentColor,
-    decorations: design.decorations,
+    decorations: fillLogoImages(design.decorations, SAMPLE_LOGO_DATA_URL),
+    logoDataUrl: SAMPLE_LOGO_DATA_URL,
     fontPair: "editorial",
     issueDate: "2026-08-01",
     dueDate: "2026-08-15",
@@ -106,9 +116,11 @@ export function sampleDocFromDesign(template: CustomTemplate): InvoiceViewModel 
     taxMode: "exclusive",
     templateId: toCustomTemplateId(template.id),
     accentColor: template.accentColor || fallback.accentColor,
-    decorations: template.decorations?.length
-      ? template.decorations
-      : fallback.decorations,
+    decorations: fillLogoImages(
+      template.decorations?.length ? template.decorations : fallback.decorations,
+      SAMPLE_LOGO_DATA_URL,
+    ),
+    logoDataUrl: SAMPLE_LOGO_DATA_URL,
     fontPair: template.fontPair || "editorial",
     logoSizePx: template.logoSizePx,
     sectionAccents: template.sectionAccents,

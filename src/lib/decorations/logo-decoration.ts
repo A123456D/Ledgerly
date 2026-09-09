@@ -56,6 +56,20 @@ export function findLogoDecorations(
   return (decorations ?? []).filter(isLogoDecoration);
 }
 
+/** Copy the current library logo onto logo shapes that have no image of their own. */
+export function fillLogoImages(
+  decorations: InvoiceDecoration[] | undefined,
+  imageDataUrl?: string | null,
+): InvoiceDecoration[] {
+  const list = decorations ?? [];
+  if (!imageDataUrl) return list;
+  return list.map((d) =>
+    isLogoDecoration(d) && !d.imageDataUrl
+      ? { ...d, imageDataUrl }
+      : d,
+  );
+}
+
 /** @deprecated Prefer createLogoDecoration — kept for template id callers. */
 export function logoPlacementForTemplate(
   _templateId: BuiltinTemplateId,

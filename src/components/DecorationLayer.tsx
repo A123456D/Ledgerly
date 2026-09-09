@@ -15,6 +15,7 @@ import {
 } from "@/lib/decorations/logo-decoration";
 import { isBusinessNameDecoration } from "@/lib/decorations/business-name-decoration";
 import { ShapeSvg } from "@/lib/shapes/render";
+import { A4_HEIGHT_MM } from "@/lib/sheet-size";
 
 export interface DecorationEditContextValue {
   editable: boolean;
@@ -86,7 +87,7 @@ function DecorationContent({ decoration }: { decoration: InvoiceDecoration }) {
         <img
           src={src}
           alt=""
-          className="h-full w-full"
+          className="h-full w-full max-h-none max-w-none"
           style={{
             opacity: decoration.opacity,
             objectFit: fit,
@@ -95,7 +96,6 @@ function DecorationContent({ decoration }: { decoration: InvoiceDecoration }) {
         />
       );
     }
-    if (!media.logoName && !decoration.fill) return null;
     return (
       <div
         className="flex h-full w-full items-center justify-center rounded-xl font-bold text-white"
@@ -116,7 +116,7 @@ function DecorationContent({ decoration }: { decoration: InvoiceDecoration }) {
       <img
         src={decoration.imageDataUrl}
         alt=""
-        className="h-full w-full"
+        className="h-full w-full max-h-none max-w-none"
         style={{
           opacity: decoration.opacity,
           objectFit: decoration.objectFit ?? "contain",
@@ -206,10 +206,15 @@ function DecorationItem({
 
   const onPointerMove = (e: ReactPointerEvent) => {
     const drag = dragRef.current;
-    if (!drag || !edit || !sheetRef.current) return;
-    const rect = sheetRef.current.getBoundingClientRect();
+    if (!drag || !edit) return;
+    const frame =
+      (e.currentTarget as HTMLElement).closest<HTMLElement>(
+        "[data-invoice-decoration-page]",
+      ) ?? sheetRef.current;
+    if (!frame) return;
+    const rect = frame.getBoundingClientRect();
     const dx = ((e.clientX - drag.startX) / rect.width) * 100;
-    const dy = ((e.clientY - drag.startY) / rect.height) * 100;
+    const dy = ((e.clientY - drag.startY) / Math.max(rect.height, 1)) * 100;
     const o = drag.orig;
 
     if (drag.mode === "move") {
@@ -339,9 +344,11 @@ export function DecorationLayer({
 
   return (
     <div
-      className={`pointer-events-none absolute inset-0 ${
-        behind ? "z-0" : "z-[4]"
+      data-invoice-decoration-page="true"
+      className={`pointer-events-none absolute left-0 top-0 w-full ${
+        behind ? "z-0" : "z-10"
       }`}
+      style={{ height: `${A4_HEIGHT_MM}mm` }}
       aria-hidden={!sorted.length}
     >
       {sorted.map((d) => (

@@ -242,6 +242,8 @@ export interface IssuedSnapshot {
   customBackgroundDataUrl?: string;
   customContentTopMm?: number;
   customContentStyle?: CustomTemplate["contentStyle"];
+  /** Frozen builtin layout for Design studio templates */
+  designBaseTemplateId?: BuiltinTemplateId;
   issueDate: string;
   dueDate: string;
   notes: string;

@@ -1,9 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-
-const A4_WIDTH_MM = 210;
-const A4_HEIGHT_MM = 297;
+import { A4_HEIGHT_MM, A4_WIDTH_MM } from "@/lib/sheet-size";
 
 /**
  * Fits an A4 invoice sheet into the host width via a GPU compositor

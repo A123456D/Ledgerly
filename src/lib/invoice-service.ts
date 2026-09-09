@@ -27,6 +27,7 @@ import {
 import { resolveLogoDataUrl, normalizeBusinessLogos } from "./logos";
 import { resolveVisibility } from "./invoice-visibility";
 import { defaultBusinessNameFill } from "./decorations/business-name-decoration";
+import { fillLogoImages } from "./decorations/logo-decoration";
 import { syncIdentityDecorations } from "./decorations/identity-layers";
 
 export function emptyLine(taxRate = 0): LineItem {
@@ -259,6 +260,13 @@ export async function createDraftInvoice(options?: {
   ) {
     invoice.decorations = buildTemplateDecorations(templateId, accentColor);
   }
+  const logoDataUrl = resolveLogoDataUrl(
+    business,
+    invoice.logoId === null
+      ? null
+      : invoice.logoId ?? business.defaultLogoId ?? null,
+  );
+  invoice.decorations = fillLogoImages(invoice.decorations, logoDataUrl);
   await db.invoices.put(invoice);
   return invoice;
 }
@@ -270,8 +278,16 @@ export async function saveInvoice(
     throw new Error("Only drafts can be edited");
   }
   const { invoice: withClient, created } = await ensureClientFromInvoice(invoice);
+  const business = normalizeBusinessLogos(await getBusiness());
+  const logoDataUrl = resolveLogoDataUrl(
+    business,
+    withClient.logoId === null
+      ? null
+      : withClient.logoId ?? business.defaultLogoId ?? null,
+  );
   const next: Invoice & { clientCreated?: boolean } = {
     ...withClient,
+    decorations: fillLogoImages(withClient.decorations, logoDataUrl),
     totals: recomputeTotals(withClient),
     updatedAt: new Date().toISOString(),
     clientCreated: created,
@@ -362,6 +378,8 @@ export async function issueInvoice(id: string): Promise<Invoice> {
       custom?.source !== "design" ? custom?.contentTopMm : undefined,
     customContentStyle:
       custom?.source !== "design" ? custom?.contentStyle : undefined,
+    designBaseTemplateId:
+      custom?.source === "design" ? custom.baseTemplateId : undefined,
     issueDate: linked.issueDate,
     dueDate: linked.dueDate,
     notes: linked.notes,
@@ -373,7 +391,10 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     sectionAccents: linked.sectionAccents
       ? { ...linked.sectionAccents }
       : undefined,
-    decorations: linked.decorations?.map((d) => ({ ...d })),
+    decorations: fillLogoImages(
+      linked.decorations?.map((d) => ({ ...d })),
+      resolveLogoDataUrl(business, logoId),
+    ),
   };
 
   const issued: Invoice = {
@@ -485,6 +506,21 @@ export async function deleteDraftInvoice(id: string): Promise<void> {
 }
 
 function customFromSnapshot(snapshot: IssuedSnapshot): CustomTemplate | null {
+  if (snapshot.designBaseTemplateId) {
+    return {
+      id: "snapshot-design",
+      name: "Issued design",
+      source: "design",
+      accentColor: snapshot.business.accentColor,
+      baseTemplateId: snapshot.designBaseTemplateId,
+      fontPair: snapshot.business.fontPair,
+      sectionAccents: snapshot.sectionAccents,
+      decorations: snapshot.decorations,
+      logoSizePx: snapshot.logoSizePx,
+      visibility: snapshot.visibility,
+      createdAt: snapshot.issuedAt,
+    };
+  }
   if (!snapshot.customBackgroundDataUrl) return null;
   return {
     id: "snapshot",
@@ -521,7 +557,10 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
       visibility: invoice.snapshot.visibility ?? invoice.visibility,
       logoSizePx: invoice.snapshot.logoSizePx ?? invoice.logoSizePx,
       sectionAccents: invoice.snapshot.sectionAccents ?? invoice.sectionAccents,
-      decorations: invoice.snapshot.decorations ?? invoice.decorations,
+      decorations: fillLogoImages(
+        invoice.snapshot.decorations ?? invoice.decorations,
+        invoice.snapshot.business.logoDataUrl,
+      ),
       customTemplate: customFromSnapshot(invoice.snapshot),
     };
   }
@@ -560,7 +599,18 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
 export async function displayDocumentLive(
   invoice: Invoice,
 ): Promise<InvoiceViewModel> {
-  if (invoice.snapshot) return displayDocument(invoice);
+  if (invoice.snapshot) {
+    const doc = displayDocument(invoice);
+    if (
+      invoice.templateId.startsWith("custom:") &&
+      doc.customTemplate?.source !== "design" &&
+      !doc.customTemplate?.backgroundDataUrl
+    ) {
+      const custom = (await getCustomTemplate(invoice.templateId)) ?? null;
+      if (custom) return { ...doc, customTemplate: custom };
+    }
+    return doc;
+  }
   const business = normalizeBusinessLogos(await getBusiness());
   const peek =
     invoice.status === "draft"
@@ -596,6 +646,8 @@ export async function displayDocumentLive(
       ? customTemplate.baseTemplateId
       : undefined;
 
+  const logoDataUrl = resolveLogoDataUrl(business, logoId);
+
   let decorations =
     invoice.decorations?.length
       ? invoice.decorations
@@ -610,8 +662,11 @@ export async function displayDocumentLive(
       accent,
       logoVisible: vis.logo,
       nameVisible: vis.businessName,
+      imageDataUrl: logoDataUrl,
       nameFill: defaultBusinessNameFill(layoutId),
     });
+  } else {
+    decorations = fillLogoImages(decorations, vis.logo ? logoDataUrl : undefined);
   }
 
   return {
@@ -625,7 +680,7 @@ export async function displayDocumentLive(
     accentColor: accent,
     fontPair: invoice.fontPair ?? business.fontPair,
     logoSizePx: invoice.logoSizePx ?? business.defaultLogoSizePx,
-    logoDataUrl: resolveLogoDataUrl(business, logoId),
+    logoDataUrl,
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,
     notes: invoice.notes,

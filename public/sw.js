@@ -1,6 +1,6 @@
 /* EasyLedger service worker — shell caching for installability + offline use */
 const BASE = new URL("./", self.registration.scope).pathname.replace(/\/$/, "");
-const CACHE = "easyledger-v3";
+const CACHE = "easyledger-v4";
 const PRECACHE = [
   `${BASE}/`,
   `${BASE}/quotes/`,

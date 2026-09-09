@@ -1,5 +1,5 @@
 import type { InvoiceDecoration } from "@/lib/types";
-import { syncLogoDecoration } from "./logo-decoration";
+import { fillLogoImages, syncLogoDecoration } from "./logo-decoration";
 import { syncBusinessNameDecoration } from "./business-name-decoration";
 
 export function syncIdentityDecorations(
@@ -17,10 +17,11 @@ export function syncIdentityDecorations(
     logoVisible: options.logoVisible,
     imageDataUrl: options.imageDataUrl,
   });
-  return syncBusinessNameDecoration(withLogos, {
+  const named = syncBusinessNameDecoration(withLogos, {
     visible: options.nameVisible,
     fill: options.nameFill,
   });
+  return fillLogoImages(named, options.imageDataUrl);
 }
 
 export function identityDecorationsUnchanged(
@@ -29,5 +30,10 @@ export function identityDecorationsUnchanged(
 ): boolean {
   const prev = before ?? [];
   if (prev.length !== after.length) return false;
-  return prev.every((d, i) => d.id === after[i]?.id && d.shapeId === after[i]?.shapeId);
+  return prev.every(
+    (d, i) =>
+      d.id === after[i]?.id &&
+      d.shapeId === after[i]?.shapeId &&
+      d.imageDataUrl === after[i]?.imageDataUrl,
+  );
 }
