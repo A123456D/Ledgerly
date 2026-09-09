@@ -810,8 +810,8 @@ export function InvoiceEditor({ id }: { id: string }) {
         </p>
       )}
 
-      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-        <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5">
+      <div className="flex min-w-0 flex-col gap-6 xl:flex-row xl:items-start">
+        <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5 xl:flex-1">
           <Field
             label={quoteDoc ? "Quote number" : "Invoice number"}
             hint={
@@ -1489,7 +1489,7 @@ export function InvoiceEditor({ id }: { id: string }) {
           </fieldset>
         </div>
 
-        <div className="relative min-w-0 xl:sticky xl:top-20 xl:self-start">
+        <div className="relative order-first min-w-0 sticky top-[var(--nav-h)] self-start xl:order-none xl:flex-[1.05]">
           <p className="mb-2 text-xs uppercase tracking-wider text-[var(--muted)]">
             Live A4 preview
           </p>
@@ -1500,7 +1500,7 @@ export function InvoiceEditor({ id }: { id: string }) {
           ) : null}
           <div
             data-invoice-preview-root="true"
-            className="min-w-0 max-h-[min(70vh,calc(100dvh-8rem))] overflow-x-hidden overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 pb-8 sm:max-h-[calc(100dvh-7rem)] sm:p-5 sm:pb-10 xl:max-h-[calc(100dvh-6.5rem)]"
+            className="min-w-0 max-h-[45dvh] overflow-x-hidden overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 pb-8 sm:max-h-[calc(100dvh-7rem)] sm:p-5 sm:pb-10 xl:max-h-[calc(100dvh-6.5rem)]"
             onClick={(e) => {
               if (locked) return;
               const t = e.target as HTMLElement | null;
