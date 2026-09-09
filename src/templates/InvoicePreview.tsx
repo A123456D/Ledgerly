@@ -31,10 +31,11 @@ import {
 import { isBusinessNameDecoration } from "@/lib/decorations/business-name-decoration";
 import {
   amountDueLabel,
-  documentNoun,
+  isQuote,
   mapDuePrefix,
   mapIssuePrefix,
 } from "@/lib/document-kind";
+import type { SarsVatMode } from "@/lib/sars-vat-mode";
 import {
   EditableSection,
   SectionAccentsCtx,
@@ -75,6 +76,11 @@ export interface InvoiceViewModel {
   sectionAccents?: SectionAccents;
   decorations?: InvoiceDecoration[];
   customTemplate?: CustomTemplate | null;
+  /**
+   * SARS VAT compliance tier (derived from the VAT-inclusive total, ZAR).
+   * Present on invoices; undefined/ignored for quotes.
+   */
+  sarsMode?: SarsVatMode;
 }
 
 const SheetDecorCtx = createContext<InvoiceDecoration[]>([]);
@@ -83,9 +89,14 @@ function show(doc: InvoiceViewModel, field: Parameters<typeof isVisible>[1]) {
   return isVisible(doc.visibility, field);
 }
 
+/**
+ * The SARS-compliant document title.
+ * Quotes keep "Quote"; all invoice tiers show "Tax Invoice".
+ */
 function sheetTitle(doc: InvoiceViewModel) {
-  return documentNoun(doc.kind);
+  return isQuote(doc.kind) ? "Quote" : "Tax Invoice";
 }
+
 
 /** Issue / due lines — omitted when hidden or empty. */
 function DateMeta({
@@ -207,7 +218,14 @@ function Gate({
 
 /* ───────── primitives ───────── */
 
-function partyLines(p: PartySnapshot, phone?: string) {
+/**
+ * Context: how to label a party's tax/VAT registration number.
+ * Defaults to "Tax ID" (quotes, generic).
+ * Set to "VAT No." at the InvoicePreview root for tax invoices.
+ */
+const VatLabelCtx = createContext("Tax ID");
+
+function partyLines(p: PartySnapshot, phone?: string, vatLabel = "Tax ID") {
   return [
     p.name,
     p.address,
@@ -215,7 +233,7 @@ function partyLines(p: PartySnapshot, phone?: string) {
     p.country,
     phone,
     p.email,
-    p.taxId ? `Tax ID ${p.taxId}` : "",
+    p.taxId ? `${vatLabel} ${p.taxId}` : "",
   ].filter(Boolean);
 }
 
@@ -232,7 +250,8 @@ function Party({
   className?: string;
   light?: boolean;
 }) {
-  const lines = partyLines(p, phone);
+  const vatLabel = useContext(VatLabelCtx);
+  const lines = partyLines(p, phone, vatLabel);
   if (!lines.length) return null;
   return (
     <div className={`space-y-0.5 break-words text-[13px] leading-snug [overflow-wrap:anywhere] ${className}`}>
@@ -498,21 +517,38 @@ function DueCard({
   invert?: boolean;
 }) {
   const totalsAccent = useSectionAccent("totals", accent);
+
+  // SARS §20 / §20(5): Method 1 — always show subtotal + VAT + total for invoices.
+  // Quotes respect the user's visibility toggles.
+  const isInvoice = !isQuote(doc.kind);
+  const showSub = isInvoice || show(doc, "subtotal");
+  const showVatRows = isInvoice || show(doc, "vat");
+
+  // For invoices, always render at least one VAT row (even when tax is R0).
+  const vatRows =
+    doc.totals.taxByRate.length > 0
+      ? doc.totals.taxByRate
+      : isInvoice
+        ? [{ rate: 0, taxable: doc.totals.subtotal, tax: 0 }]
+        : [];
+
+  const totalLabel = isInvoice ? "Total incl VAT" : amountDueLabel(doc.kind);
+
   return (
     <EditableSection section="totals" accent={accent} className="ml-auto mt-6 w-[15.5rem] space-y-2 text-[13px]">
-      {show(doc, "subtotal") ? (
+      {showSub ? (
         <div className={`flex justify-between ${invert ? "text-white/70" : "opacity-65"}`}>
-          <span>Subtotal</span>
+          <span>{isInvoice ? "Subtotal excl VAT" : "Subtotal"}</span>
           <span className="tabular-nums">{formatMoney(doc.totals.subtotal, doc.currency)}</span>
         </div>
       ) : null}
-      {show(doc, "vat")
-        ? doc.totals.taxByRate.map((b) => (
+      {showVatRows
+        ? vatRows.map((b) => (
             <div
               key={b.rate}
               className={`flex justify-between ${invert ? "text-white/70" : "opacity-65"}`}
             >
-              <span>VAT {b.rate}%</span>
+              <span>VAT {b.rate > 0 ? `${b.rate}%` : "0%"}</span>
               <span className="tabular-nums">{formatMoney(b.tax, doc.currency)}</span>
             </div>
           ))
@@ -524,7 +560,7 @@ function DueCard({
         <p
           className={`text-[10px] font-bold uppercase tracking-[0.2em] ${invert ? "opacity-50" : "text-white/80"}`}
         >
-          {amountDueLabel(doc.kind)}
+          {totalLabel}
         </p>
         <p className="mt-1 text-[1.65rem] font-bold tabular-nums tracking-tight">
           {formatMoney(doc.totals.total, doc.currency)}
@@ -732,11 +768,35 @@ function Minimal({ doc, accent, logo }: Ctx) {
         accent={accent}
         className="ml-auto mt-8 w-60 border border-neutral-900 p-4"
       >
-        <div data-invoice-avoid-break>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">{amountDueLabel(doc.kind)}</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">
-            {formatMoney(doc.totals.total, doc.currency)}
-          </p>
+        <div data-invoice-avoid-break className="space-y-2 text-[13px]">
+          {/* Method 1 breakdown always shown for invoices (SARS §20/§20(5)) */}
+          {!isQuote(doc.kind) || show(doc, "subtotal") ? (
+            <div className="flex justify-between text-neutral-500">
+              <span>{!isQuote(doc.kind) ? "Subtotal excl VAT" : "Subtotal"}</span>
+              <span className="tabular-nums">{formatMoney(doc.totals.subtotal, doc.currency)}</span>
+            </div>
+          ) : null}
+          {!isQuote(doc.kind) || show(doc, "vat") ? (
+            (doc.totals.taxByRate.length > 0
+              ? doc.totals.taxByRate
+              : !isQuote(doc.kind)
+                ? [{ rate: 0, taxable: doc.totals.subtotal, tax: 0 }]
+                : []
+            ).map((b) => (
+              <div key={b.rate} className="flex justify-between text-neutral-500">
+                <span>VAT {b.rate > 0 ? `${b.rate}%` : "0%"}</span>
+                <span className="tabular-nums">{formatMoney(b.tax, doc.currency)}</span>
+              </div>
+            ))
+          ) : null}
+          <div className="border-t border-neutral-900 pt-2">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+              {!isQuote(doc.kind) ? "Total incl VAT" : amountDueLabel(doc.kind)}
+            </p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">
+              {formatMoney(doc.totals.total, doc.currency)}
+            </p>
+          </div>
         </div>
       </EditableSection>
       <Notes doc={doc} accent={accent} />
@@ -966,15 +1026,18 @@ function Coral({ doc, accent, logo }: Ctx) {
               <HeaderEmail doc={doc} className="text-xs opacity-50" />
             </div>
           </div>
-          <EditableSection
-            section="reference"
-            accent={accent}
-            tint={false}
-            className="rounded-full px-5 py-2.5 text-sm font-bold text-white shadow-sm"
-            style={{ background: accent }}
-          >
-            {doc.number}
-          </EditableSection>
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            <p className="text-[10px] uppercase tracking-[0.22em] opacity-50">{sheetTitle(doc)}</p>
+            <EditableSection
+              section="reference"
+              accent={accent}
+              tint={false}
+              className="rounded-full px-5 py-2.5 text-sm font-bold text-white shadow-sm"
+              style={{ background: accent }}
+            >
+              {doc.number}
+            </EditableSection>
+          </div>
         </EditableSection>
         <div className="grid grid-cols-3 gap-4 px-7 py-6 text-sm font-[family-name:var(--font-body)]">
           <EditableSection section="billTo" accent={accent}>
@@ -1069,7 +1132,7 @@ function Luxe({ doc, accent, logo }: Ctx) {
             <Logo src={logo} name={doc.business.name} accent={accent} rounded="rounded-full" />
           </LogoFrame>
           <p className="mt-6 text-[11px] uppercase tracking-[0.5em]" style={{ color: accent }}>
-            Private invoice
+            {sheetTitle(doc)}
           </p>
           <HeaderBusinessName
             doc={doc}
@@ -1360,7 +1423,7 @@ function Parchment({ doc, accent, logo }: Ctx) {
             </div>
             <EditableSection section="reference" accent={accent} className="text-right">
               <p className="text-sm uppercase tracking-[0.28em]" style={{ color: accent }}>
-                Statement of account
+                {sheetTitle(doc)}
               </p>
               <p className="mt-2 text-lg font-semibold tabular-nums">{doc.number}</p>
               <DateMeta
@@ -1565,6 +1628,8 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
     <LogoVisibleCtx.Provider value={visibility.logo}>
       {/* Identity lives on the canvas when a logo shape exists; otherwise the layout logo is used. */}
       <InlineLogoCtx.Provider value={!logoOnCanvas}>
+        {/* SARS: use "VAT No." label for supplier/recipient taxId on invoices; quotes keep "Tax ID". */}
+        <VatLabelCtx.Provider value={isQuote(view.kind) ? "Tax ID" : "VAT No."}>
         <DecorationMediaContext.Provider
           value={{
             logoSrc: logo,
@@ -1583,6 +1648,7 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
             </LogoSizeCtx.Provider>
           </FontPairCtx.Provider>
         </DecorationMediaContext.Provider>
+        </VatLabelCtx.Provider>
       </InlineLogoCtx.Provider>
     </LogoVisibleCtx.Provider>
   );

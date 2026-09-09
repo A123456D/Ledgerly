@@ -84,6 +84,12 @@ import {
   issueDateLabel,
   isQuote,
 } from "@/lib/document-kind";
+import {
+  sarsModeFromDoc,
+  sarsModeLabel,
+  sarsModeBadgeClass,
+  sarsInvoiceSendErrors,
+} from "@/lib/sars-vat-mode";
 import { normalizeDocumentNumber } from "@/lib/numbering";
 import type { InvoiceStatus } from "@/lib/types";
 
@@ -196,6 +202,40 @@ export function InvoiceEditor({ id }: { id: string }) {
   const locked = invoice.status !== "draft";
   const quoteDoc = isQuote(invoice.kind);
   const vis = resolveVisibility(invoice.visibility);
+
+  // ── SARS VAT compliance (invoices only) ─────────────────────────────────────
+  const sarsMode = !quoteDoc ? sarsModeFromDoc(invoice) : null;
+  const sarsSendErrors = !quoteDoc
+    ? sarsInvoiceSendErrors(
+        // Pass a minimal doc shape from live invoice state (not yet a full viewmodel)
+        {
+          ...invoice,
+          business: {
+            name: business?.name ?? "",
+            email: business?.email ?? "",
+            address: business?.address ?? "",
+            city: business?.city ?? "",
+            postalCode: business?.postalCode ?? "",
+            country: business?.country ?? "",
+            taxId: business?.taxId ?? "",
+          },
+          number: invoice.number ?? "",
+          logoDataUrl: undefined,
+          accentColor: invoice.accentColor,
+          templateId: invoice.templateId,
+          currency: invoice.currency,
+          status: invoice.status,
+          customTemplate: null,
+        },
+        business ?? null,
+        sarsMode ?? "no-formal",
+      )
+    : [];
+  // Crossing R5 000 with missing client triggers a soft warning (not a hard block on its own)
+  const sarsMissingClientWarning =
+    !quoteDoc &&
+    sarsMode === "full" &&
+    (!invoice.client.name?.trim() || !invoice.client.address?.trim());
 
   function toggleFieldVisibility(key: InvoiceVisibleField) {
     const nextVis = !resolveVisibility(invoice!.visibility)[key];
@@ -522,6 +562,11 @@ export function InvoiceEditor({ id }: { id: string }) {
 
   async function onIssue() {
     if (!invoice) return;
+    // Hard block for SARS non-compliance on invoices
+    if (!quoteDoc && sarsSendErrors.length > 0) {
+      setError(sarsSendErrors[0]);
+      return;
+    }
     const current = invoice;
     setBusy(true);
     setError("");
@@ -791,6 +836,15 @@ export function InvoiceEditor({ id }: { id: string }) {
           >
             Send
           </Button>
+          {/* SARS compliance badge — invoices only, always visible near Send */}
+          {sarsMode ? (
+            <span
+              className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${sarsModeBadgeClass(sarsMode)}`}
+              title={`SARS Tax Invoice tier: ${sarsModeLabel(sarsMode)}`}
+            >
+              {sarsModeLabel(sarsMode)} Tax Invoice
+            </span>
+          ) : null}
           <Button variant="ghost" className="shrink-0" onClick={onDuplicate} disabled={busy}>
             Duplicate
           </Button>
@@ -809,6 +863,27 @@ export function InvoiceEditor({ id }: { id: string }) {
           {error || message}
         </p>
       )}
+
+      {/* SARS send-gate warnings — only shown on draft invoices with problems */}
+      {!quoteDoc && !locked && sarsSendErrors.length > 0 ? (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700">
+            Tax Invoice — Send blocked
+          </p>
+          <ul className="space-y-0.5 text-xs text-red-700">
+            {sarsSendErrors.map((err) => (
+              <li key={err}>· {err}</li>
+            ))}
+          </ul>
+        </div>
+      ) : sarsMissingClientWarning && !locked ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs text-amber-800">
+            <span className="font-semibold">Full Tax Invoice:</span> total exceeds R5 000 — client
+            name and address are required before you can send. Add them in the Bill To section.
+          </p>
+        </div>
+      ) : null}
 
       <div className="flex min-w-0 flex-col gap-6 xl:flex-row xl:items-start">
         <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5 xl:flex-1">
@@ -979,6 +1054,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                     {fieldShowCheckbox("issueDate")}
                   </span>
                 }
+                hint={!quoteDoc ? "SARS requires issue within 21 days of supply." : undefined}
               >
                 <div className="flex gap-2">
                   <input
@@ -1552,6 +1628,7 @@ export function InvoiceEditor({ id }: { id: string }) {
           doc={preview}
           fromName={business?.name}
           fromEmail={business?.email}
+          sarsErrors={sarsSendErrors}
           onSent={async ({ to }) => {
             const next: Invoice = {
               ...invoice,
