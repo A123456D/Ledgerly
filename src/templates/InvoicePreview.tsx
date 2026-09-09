@@ -218,7 +218,14 @@ function Gate({
 
 /* ───────── primitives ───────── */
 
-function partyLines(p: PartySnapshot, phone?: string) {
+/**
+ * Context: how to label a party's tax/VAT registration number.
+ * Defaults to "Tax ID" (quotes, generic).
+ * Set to "VAT No." at the InvoicePreview root for tax invoices.
+ */
+const VatLabelCtx = createContext("Tax ID");
+
+function partyLines(p: PartySnapshot, phone?: string, vatLabel = "Tax ID") {
   return [
     p.name,
     p.address,
@@ -226,7 +233,7 @@ function partyLines(p: PartySnapshot, phone?: string) {
     p.country,
     phone,
     p.email,
-    p.taxId ? `Tax ID ${p.taxId}` : "",
+    p.taxId ? `${vatLabel} ${p.taxId}` : "",
   ].filter(Boolean);
 }
 
@@ -243,7 +250,8 @@ function Party({
   className?: string;
   light?: boolean;
 }) {
-  const lines = partyLines(p, phone);
+  const vatLabel = useContext(VatLabelCtx);
+  const lines = partyLines(p, phone, vatLabel);
   if (!lines.length) return null;
   return (
     <div className={`space-y-0.5 break-words text-[13px] leading-snug [overflow-wrap:anywhere] ${className}`}>
@@ -1620,6 +1628,8 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
     <LogoVisibleCtx.Provider value={visibility.logo}>
       {/* Identity lives on the canvas when a logo shape exists; otherwise the layout logo is used. */}
       <InlineLogoCtx.Provider value={!logoOnCanvas}>
+        {/* SARS: use "VAT No." label for supplier/recipient taxId on invoices; quotes keep "Tax ID". */}
+        <VatLabelCtx.Provider value={isQuote(view.kind) ? "Tax ID" : "VAT No."}>
         <DecorationMediaContext.Provider
           value={{
             logoSrc: logo,
@@ -1638,6 +1648,7 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
             </LogoSizeCtx.Provider>
           </FontPairCtx.Provider>
         </DecorationMediaContext.Provider>
+        </VatLabelCtx.Provider>
       </InlineLogoCtx.Provider>
     </LogoVisibleCtx.Provider>
   );
