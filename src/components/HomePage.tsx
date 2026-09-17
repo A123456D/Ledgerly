@@ -52,6 +52,9 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
   const business = useLiveQuery(() => db.business.get("default"), []);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<InvoiceFilter>("all");
+  const [vatNudgeDismissed, setVatNudgeDismissed] = useState(() => {
+    try { return sessionStorage.getItem("vatNudgeDismissed") === "1"; } catch { return false; }
+  });
   const nounLower = documentNounLower(kind);
   const isInvoice = kind === "invoice";
 
@@ -61,7 +64,21 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
     return documents.filter((inv) => matchesFilter(inv, filter));
   }, [documents, filter, isInvoice]);
 
-  const needsSetup = business && !business.name.trim();
+  const needsSetup =
+    kind === "invoice" &&
+    business &&
+    (!business.name.trim() || !business.address?.trim() || !business.taxId?.trim());
+
+  const showVatNudge =
+    kind === "invoice" &&
+    business &&
+    !business.taxId?.trim() &&
+    !vatNudgeDismissed;
+
+  function dismissVatNudge() {
+    setVatNudgeDismissed(true);
+    try { sessionStorage.setItem("vatNudgeDismissed", "1"); } catch { /* ignore */ }
+  }
 
   async function onNew() {
     setBusy(true);
@@ -126,6 +143,32 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
           <Link href="/settings" className="font-medium underline">
             Open settings
           </Link>
+        </div>
+      ) : null}
+
+      {showVatNudge ? (
+        <div className="mb-6 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="font-medium">Add your VAT No. to send tax invoices</p>
+            <p className="mt-0.5 text-amber-800">
+              SARS needs your 10-digit VAT number on Tax Invoices. Add it in Settings — takes a minute.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Link
+              href="/settings"
+              className="inline-flex items-center rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800"
+            >
+              Add VAT No.
+            </Link>
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+              onClick={dismissVatNudge}
+            >
+              Not now
+            </button>
+          </div>
         </div>
       ) : null}
 
