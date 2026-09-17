@@ -213,10 +213,18 @@ export async function getSettings(): Promise<AppSettings> {
   return settings;
 }
 
+/**
+ * Patch settings using only the `settings` object store.
+ * Must not call ensureDefaults() — that also reads `business` and throws
+ * NotFoundError inside Dexie transactions that omit that store (issueInvoice).
+ */
 export async function saveSettings(
   patch: Partial<AppSettings>,
 ): Promise<AppSettings> {
-  const current = await getSettings();
+  const stored = await db.settings.get("default");
+  const current: AppSettings = stored
+    ? { ...defaultSettings(), ...stored }
+    : defaultSettings();
   const next: AppSettings = { ...current, ...patch, id: "default" };
   await db.settings.put(next);
   return next;

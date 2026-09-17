@@ -1,4 +1,4 @@
-import { db, getBusiness, getSettings, saveSettings } from "./db";
+import { db, getBusiness, getSettings } from "./db";
 import { getCustomTemplate } from "./custom-templates";
 import { addDaysISO, todayISO, uid } from "./format";
 import { calculateTotals } from "./invoice-math";
@@ -470,9 +470,15 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     updatedAt: new Date().toISOString(),
   };
 
-  await db.transaction("rw", db.invoices, db.settings, db.clients, async () => {
+  // invoices + settings only — do not call ensureDefaults() in here (it reads
+  // `business` and throws NotFoundError if that store is not in the transaction).
+  await db.transaction("rw", db.invoices, db.settings, async () => {
     await db.invoices.put(issued);
-    await saveSettings(sequencePatch(quote, nextState));
+    await db.settings.put({
+      ...settings,
+      ...sequencePatch(quote, nextState),
+      id: "default",
+    });
   });
 
   void import("@/lib/auto-backup").then(({ createAutoBackup }) =>
@@ -534,7 +540,11 @@ export async function updateIssuedDocumentNumber(
 
   await db.transaction("rw", db.invoices, db.settings, async () => {
     await db.invoices.put(next);
-    await saveSettings(sequencePatch(quote, nextState));
+    await db.settings.put({
+      ...settings,
+      ...sequencePatch(quote, nextState),
+      id: "default",
+    });
   });
 
   return next;
