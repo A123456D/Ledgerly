@@ -172,8 +172,42 @@ export function SettingsPage() {
               <input className={inputClass} value={form.country} onChange={(e) => patch("country", e.target.value)} />
             </Field>
           </div>
-          <Field label="VAT No." hint="SARS 10-digit VAT number. Needed on tax invoices.">
+          <label className="flex items-start gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--wash)]/50 px-3 py-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--line)] accent-[var(--accent)]"
+              checked={Boolean(form.vatRegistered)}
+              onChange={(e) => patch("vatRegistered", e.target.checked)}
+            />
+            <span>
+              <span className="font-medium text-[var(--ink)]">VAT registered — issue SARS tax invoices</span>
+              <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                Off by default. Turn on only if you have a VAT number and need Tax Invoices. Off: documents say Invoice, and SARS checks will not block Send.
+              </span>
+            </span>
+          </label>
+          <Field
+            label="VAT No."
+            hint={
+              form.vatRegistered
+                ? "SARS 10-digit VAT number. Needed on tax invoices."
+                : "Optional. Used on the sheet if you fill it in — not required unless VAT registered is on."
+            }
+          >
             <input className={inputClass} value={form.taxId} placeholder="4123456789" onChange={(e) => patch("taxId", e.target.value)} />
+          </Field>
+          <Field
+            label="Company No."
+            hint="CIPC registration, e.g. 2020/123456/07. Optional — toggle it on each invoice."
+          >
+            <input
+              className={inputClass}
+              value={form.companyNumber ?? ""}
+              placeholder="2020/123456/07"
+              maxLength={40}
+              autoComplete="off"
+              onChange={(e) => patch("companyNumber", e.target.value)}
+            />
           </Field>
         </section>
 
@@ -202,7 +236,7 @@ export function SettingsPage() {
                 <option value="inclusive">Prices incl. VAT (VAT already in the rate)</option>
               </select>
             </Field>
-            <Field label="Net days">
+            <Field label="Net days" hint="Optional helper — use it on an invoice to fill a due date. New invoices do not get a due date automatically.">
               <input className={inputClass} type="number" min={0} value={form.netDays} onChange={(e) => patch("netDays", Number(e.target.value))} />
             </Field>
             <Field label="Invoice prefix" hint="Numbers format as PREFIX-YEAR-0001">
@@ -221,8 +255,11 @@ export function SettingsPage() {
             onAccentChange={(accentColor) => patch("accentColor", accentColor)}
             onFontChange={(fontPair) => patch("fontPair", fontPair)}
           />
-          <Field label="Payment terms / instructions">
-            <textarea className={inputClass} rows={3} value={form.paymentTerms} onChange={(e) => patch("paymentTerms", e.target.value)} />
+          <Field
+            label="Payment terms / instructions"
+            hint="Optional. Copied onto new invoices only if you fill this in. Leave blank to omit Payment from the sheet."
+          >
+            <textarea className={inputClass} rows={3} value={form.paymentTerms} placeholder="e.g. EFT to … within 14 days" onChange={(e) => patch("paymentTerms", e.target.value)} />
           </Field>
           <LogoLibrary
             business={form}

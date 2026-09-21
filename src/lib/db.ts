@@ -11,6 +11,8 @@ import {
   DEFAULT_ACCENT,
 } from "./types";
 import { normalizeBusinessLogos } from "./logos";
+import { COMPANY_NUMBER_MAX_LENGTH } from "./format";
+import { DEFAULT_FONT_PAIR } from "./fonts";
 
 export class InvoiceDatabase extends Dexie {
   business!: EntityTable<Business, "id">;
@@ -84,13 +86,15 @@ export function defaultBusiness(): Business {
     postalCode: "",
     country: "South Africa",
     taxId: "",
+    companyNumber: "",
+    vatRegistered: false,
     logos: [],
     accentColor: DEFAULT_ACCENT,
-    fontPair: "editorial",
+    fontPair: DEFAULT_FONT_PAIR,
     currency: "ZAR",
     defaultTaxRate: 15,
     taxMode: "exclusive",
-    paymentTerms: "Payment due within 14 days of issue.",
+    paymentTerms: "",
     netDays: 14,
     invoicePrefix: "INV-",
     quotePrefix: "QUO-",
@@ -149,6 +153,27 @@ export async function ensureDefaults(): Promise<{
         updatedAt: new Date().toISOString(),
       };
     }
+    if (next.paymentTerms === "Payment due within 14 days of issue.") {
+      next = {
+        ...next,
+        paymentTerms: "",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (next.vatRegistered === undefined) {
+      next = {
+        ...next,
+        vatRegistered: false,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (!next.fontPair) {
+      next = {
+        ...next,
+        fontPair: DEFAULT_FONT_PAIR,
+        updatedAt: new Date().toISOString(),
+      };
+    }
     if (next !== business) {
       business = next;
       await db.business.put(business);
@@ -186,6 +211,18 @@ export async function ensureDefaults(): Promise<{
       await db.settings.put(settings);
     }
   }
+  if (!settings.migratedDefaultFontPair) {
+    if (business.fontPair === "editorial") {
+      business = {
+        ...business,
+        fontPair: DEFAULT_FONT_PAIR,
+        updatedAt: new Date().toISOString(),
+      };
+      await db.business.put(business);
+    }
+    settings = { ...settings, migratedDefaultFontPair: true };
+    await db.settings.put(settings);
+  }
   return { business, settings };
 }
 
@@ -204,6 +241,9 @@ export async function saveBusiness(
     id: "default",
     updatedAt: new Date().toISOString(),
   });
+  if (typeof next.companyNumber === "string") {
+    next.companyNumber = next.companyNumber.trim().slice(0, COMPANY_NUMBER_MAX_LENGTH);
+  }
   await db.business.put(next);
   return next;
 }

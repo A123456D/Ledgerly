@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import type { CSSProperties } from "react";
 import {
   Fraunces,
   Source_Sans_3,
@@ -9,6 +8,7 @@ import {
 } from "next/font/google";
 import { AppShell } from "@/components/ui";
 import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
+import { DEFAULT_FONT_PAIR, fontPairCssVars } from "@/lib/fonts";
 import "./globals.css";
 
 const display = Fraunces({
@@ -37,10 +37,7 @@ const mono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
-const rootFontVars = {
-  ["--font-display"]: "var(--font-editorial-display)",
-  ["--font-body"]: "var(--font-editorial-body)",
-} as CSSProperties;
+const rootFontVars = fontPairCssVars(DEFAULT_FONT_PAIR);
 
 export const metadata: Metadata = {
   title: `${APP_NAME} — ${APP_TAGLINE}`,

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, DecimalInput, Field, StatusPill, inputClass } from "@/components/ui";
-import { formatDate, formatMoney, todayISO, uid } from "@/lib/format";
+import { addDaysISO, formatDate, formatMoney, todayISO, uid } from "@/lib/format";
 import {
   clientToParty,
   displayDocumentLive,
@@ -78,6 +78,7 @@ import {
 } from "@/lib/custom-templates";
 import { shareDesignTemplate } from "@/lib/templates/share-template";
 import { isCustomTemplateId } from "@/lib/types";
+import { DEFAULT_FONT_PAIR } from "@/lib/fonts";
 import {
   documentHref,
   documentListHref,
@@ -87,6 +88,7 @@ import {
   isQuote,
 } from "@/lib/document-kind";
 import {
+  isSarsTaxInvoiceEnabled,
   sarsModeFromDoc,
   sarsModeLabel,
   sarsModeBadgeClass,
@@ -208,12 +210,11 @@ export function InvoiceEditor({ id }: { id: string }) {
   const locked = invoice.status !== "draft";
   const quoteDoc = isQuote(invoice.kind);
   const vis = resolveVisibility(invoice.visibility);
+  const sarsOn = !quoteDoc && isSarsTaxInvoiceEnabled(business);
 
-  // ── SARS VAT compliance (invoices only) ─────────────────────────────────────
-  const sarsMode = !quoteDoc ? sarsModeFromDoc(invoice) : null;
-  const sarsSendErrors = !quoteDoc
+  const sarsMode = sarsOn ? sarsModeFromDoc(invoice) : null;
+  const sarsSendErrors = sarsOn
     ? sarsInvoiceSendErrors(
-        // Pass a minimal doc shape from live invoice state (not yet a full viewmodel)
         {
           ...invoice,
           business: {
@@ -237,9 +238,8 @@ export function InvoiceEditor({ id }: { id: string }) {
         sarsMode ?? "no-formal",
       )
     : [];
-  // Crossing R5 000 with missing client triggers a soft warning (not a hard block on its own)
   const sarsMissingClientWarning =
-    !quoteDoc &&
+    sarsOn &&
     sarsMode === "full" &&
     (!invoice.client.name?.trim() || !invoice.client.address?.trim());
 
@@ -569,7 +569,7 @@ export function InvoiceEditor({ id }: { id: string }) {
   async function onIssue() {
     if (!invoice) return;
     // Hard block for SARS non-compliance on invoices
-    if (!quoteDoc && sarsSendErrors.length > 0) {
+    if (sarsOn && sarsSendErrors.length > 0) {
       setError(sarsSendErrors[0]);
       return;
     }
@@ -874,7 +874,7 @@ export function InvoiceEditor({ id }: { id: string }) {
             Send
           </Button>
           {/* SARS compliance badge — invoices only, always visible near Send */}
-          {sarsMode ? (
+          {sarsOn && sarsMode ? (
             <span
               className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${sarsModeBadgeClass(sarsMode)}`}
               title={`SARS Tax Invoice tier: ${sarsModeLabel(sarsMode)}`}
@@ -886,6 +886,12 @@ export function InvoiceEditor({ id }: { id: string }) {
             Duplicate
           </Button>
         </div>
+        <a
+          href="#live-preview"
+          className="w-fit text-xs text-[var(--muted)] underline-offset-2 hover:underline lg:hidden"
+        >
+          Jump to live preview
+        </a>
       </div>
 
       {invoice.lastSentAt ? (
@@ -936,7 +942,7 @@ export function InvoiceEditor({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {!quoteDoc && business && !business.taxId?.trim() && !vatNudgeDismissed ? (
+      {!quoteDoc && business && sarsOn && !business.taxId?.trim() && !vatNudgeDismissed ? (
         <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="font-medium">Add your VAT No. to send tax invoices</p>
@@ -962,8 +968,8 @@ export function InvoiceEditor({ id }: { id: string }) {
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-col gap-6 xl:flex-row xl:items-start">
-        <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5 xl:flex-1">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
+        <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5">
           <Field
             label={quoteDoc ? "Quote number" : "Invoice number"}
             hint={
@@ -1064,9 +1070,9 @@ export function InvoiceEditor({ id }: { id: string }) {
                 />
               </Field>
               <Field
-                label={quoteDoc ? "Client tax ID" : "Client VAT No."}
+                label={quoteDoc || !sarsOn ? "Client tax ID" : "Client VAT No."}
                 hint={
-                  quoteDoc
+                  quoteDoc || !sarsOn
                     ? undefined
                     : "Optional on abridged (≤ R5 000). Required on the PDF when the client is VAT-registered and total > R5 000."
                 }
@@ -1166,6 +1172,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                     {fieldShowCheckbox("dueDate")}
                   </span>
                 }
+                hint="Optional — leave blank to hide it on the invoice."
               >
                 <div className="flex gap-2">
                   <input
@@ -1181,6 +1188,21 @@ export function InvoiceEditor({ id }: { id: string }) {
                       onClick={() => update({ dueDate: "" })}
                     >
                       Clear
+                    </button>
+                  ) : business?.netDays ? (
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs text-[var(--muted)] underline"
+                      onClick={() =>
+                        update({
+                          dueDate: addDaysISO(
+                            invoice.issueDate || todayISO(),
+                            business.netDays,
+                          ),
+                        })
+                      }
+                    >
+                      Use net {business.netDays} days
                     </button>
                   ) : null}
                 </div>
@@ -1578,7 +1600,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                   fontPair={
                     (invoice.fontPair as FontPair | undefined) ||
                     business?.fontPair ||
-                    "editorial"
+                    DEFAULT_FONT_PAIR
                   }
                   onAccentChange={(accentColor) => update({ accentColor })}
                   onFontChange={(fontPair) => update({ fontPair })}
@@ -1643,11 +1665,15 @@ export function InvoiceEditor({ id }: { id: string }) {
             </Field>
             </div>
             <div id="edit-section-payment">
-            <Field label="Payment instructions">
+            <Field
+              label="Payment instructions"
+              hint="Optional — leave blank to hide the Payment block."
+            >
               <textarea
                 className={inputClass}
                 rows={2}
                 value={invoice.paymentInstructions}
+                placeholder="Bank, EFT, or terms — only if you want them on this invoice"
                 onChange={(e) =>
                   update({ paymentInstructions: e.target.value })
                 }
@@ -1657,7 +1683,10 @@ export function InvoiceEditor({ id }: { id: string }) {
           </fieldset>
         </div>
 
-        <div className="relative order-first min-w-0 sticky top-[var(--nav-h)] self-start xl:order-none xl:flex-[1.05]">
+        <div
+          id="live-preview"
+          className="relative min-w-0 scroll-mt-[calc(var(--nav-h)+0.75rem)]"
+        >
           <p className="mb-2 text-xs uppercase tracking-wider text-[var(--muted)]">
             Live A4 preview
           </p>
@@ -1668,7 +1697,7 @@ export function InvoiceEditor({ id }: { id: string }) {
           ) : null}
           <div
             data-invoice-preview-root="true"
-            className="min-w-0 max-h-[45dvh] overflow-x-hidden overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 pb-8 sm:max-h-[calc(100dvh-7rem)] sm:p-5 sm:pb-10 xl:max-h-[calc(100dvh-6.5rem)]"
+            className="min-w-0 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--wash)] p-3 sm:p-5"
             onClick={(e) => {
               if (locked) return;
               const t = e.target as HTMLElement | null;

@@ -149,6 +149,14 @@ export interface Business {
   postalCode: string;
   country: string;
   taxId: string;
+  /** CIPC / company registration number (optional on invoices). */
+  companyNumber?: string;
+  /**
+   * When true, invoices are SARS tax invoices (gates, badge, “Tax Invoice” title).
+   * Off by default so non-VAT users are not blocked. Missing on old records:
+   * treat as on only if taxId is already filled.
+   */
+  vatRegistered?: boolean;
   /** @deprecated prefer logos[]; kept in sync with default logo for older data */
   logoDataUrl?: string;
   logos?: BusinessLogo[];
@@ -225,6 +233,7 @@ export interface PartySnapshot {
   postalCode: string;
   country: string;
   taxId: string;
+  companyNumber?: string;
 }
 
 export interface IssuedSnapshot {
@@ -253,6 +262,8 @@ export interface IssuedSnapshot {
   totals: InvoiceTotals;
   /** Frozen print visibility at issue time */
   visibility?: InvoiceVisibility;
+  /** Frozen SARS tax-invoice mode at issue. Missing on older snapshots = was on. */
+  sarsTaxInvoice?: boolean;
   /** Frozen logo size at issue time */
   logoSizePx?: number;
   /** Per-section accent overrides frozen at issue */
@@ -365,6 +376,8 @@ export interface AppSettings {
   /** Keep the newest N auto-backups (default 10). */
   autoBackupKeep?: number;
   lastAutoBackupAt?: string;
+  /** One-time: factory font was editorial; do not re-apply after the user picks Editorial. */
+  migratedDefaultFontPair?: boolean;
 }
 
 /** Local auto-backup snapshot stored in IndexedDB. */

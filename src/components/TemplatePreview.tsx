@@ -20,6 +20,7 @@ import {
 import { InvoicePreview, type InvoiceViewModel } from "@/templates/InvoicePreview";
 import { shareDesignTemplate } from "@/lib/templates/share-template";
 import { fillLogoImages } from "@/lib/decorations/logo-decoration";
+import { DEFAULT_FONT_PAIR } from "@/lib/fonts";
 
 const SAMPLE_LOGO_DATA_URL =
   "data:image/svg+xml," +
@@ -67,6 +68,7 @@ function sampleParties(): Pick<InvoiceViewModel, "business" | "client"> {
       postalCode: "8001",
       country: "South Africa",
       taxId: "4123456789",
+      companyNumber: "2020/123456/07",
       logoDataUrl: SAMPLE_LOGO_DATA_URL,
     },
     client: {
@@ -93,7 +95,7 @@ export function sampleDoc(meta: TemplateMeta): InvoiceViewModel {
     accentColor: design.accentColor,
     decorations: fillLogoImages(design.decorations, SAMPLE_LOGO_DATA_URL),
     logoDataUrl: SAMPLE_LOGO_DATA_URL,
-    fontPair: "editorial",
+    fontPair: DEFAULT_FONT_PAIR,
     issueDate: "2026-08-01",
     dueDate: "2026-08-15",
     notes: "Thank you for your business.",
@@ -125,7 +127,7 @@ export function sampleDocFromDesign(template: CustomTemplate): InvoiceViewModel 
       SAMPLE_LOGO_DATA_URL,
     ),
     logoDataUrl: SAMPLE_LOGO_DATA_URL,
-    fontPair: template.fontPair || "editorial",
+    fontPair: template.fontPair || DEFAULT_FONT_PAIR,
     logoSizePx: template.logoSizePx,
     sectionAccents: template.sectionAccents,
     visibility: template.visibility,

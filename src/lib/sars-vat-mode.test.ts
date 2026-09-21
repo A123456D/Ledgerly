@@ -3,6 +3,7 @@ import {
   deriveSarsMode,
   sarsModeFromDoc,
   sarsInvoiceSendErrors,
+  isSarsTaxInvoiceEnabled,
   type SarsVatMode,
 } from "./sars-vat-mode";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
@@ -229,5 +230,26 @@ describe("sarsInvoiceSendErrors", () => {
   it("passes null business gracefully", () => {
     const errors = sarsInvoiceSendErrors(makeViewDoc(), null, "abridged");
     expect(errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe("isSarsTaxInvoiceEnabled", () => {
+  it("is off when the business is missing", () => {
+    expect(isSarsTaxInvoiceEnabled(null)).toBe(false);
+    expect(isSarsTaxInvoiceEnabled(undefined)).toBe(false);
+  });
+
+  it("respects the explicit Settings flag", () => {
+    expect(
+      isSarsTaxInvoiceEnabled({ vatRegistered: false, taxId: "4123456789" }),
+    ).toBe(false);
+    expect(isSarsTaxInvoiceEnabled({ vatRegistered: true, taxId: "" })).toBe(
+      true,
+    );
+  });
+
+  it("falls back to VAT number only when the flag was never saved", () => {
+    expect(isSarsTaxInvoiceEnabled({ taxId: "4123456789" })).toBe(true);
+    expect(isSarsTaxInvoiceEnabled({ taxId: "" })).toBe(false);
   });
 });

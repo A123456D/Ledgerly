@@ -242,6 +242,21 @@ export function InvoiceSectionEditor({
                 onChange={(e) => onUpdateBusiness({ phone: e.target.value })}
               />
             </Field>
+            <Field
+              label="Company No."
+              hint="CIPC registration. Uncheck Company No. under Show on invoice to hide it."
+            >
+              <input
+                className={inputClass}
+                value={business.companyNumber ?? ""}
+                placeholder="2020/123456/07"
+                maxLength={40}
+                autoComplete="off"
+                onChange={(e) =>
+                  onUpdateBusiness({ companyNumber: e.target.value })
+                }
+              />
+            </Field>
             <Field label="Address">
               <textarea
                 className={inputClass}
@@ -291,7 +306,7 @@ export function InvoiceSectionEditor({
                 onChange={(e) => onUpdateInvoice({ issueDate: e.target.value })}
               />
             </Field>
-            <Field label={dueDateLabel(invoice.kind)}>
+            <Field label={dueDateLabel(invoice.kind)} hint="Optional">
               <input
                 className={inputClass}
                 type="date"
@@ -314,7 +329,10 @@ export function InvoiceSectionEditor({
         ) : null}
 
         {section === "payment" ? (
-          <Field label="Payment instructions">
+          <Field
+            label="Payment instructions"
+            hint="Optional — leave blank to hide Payment on the sheet."
+          >
             <textarea
               className={inputClass}
               rows={3}

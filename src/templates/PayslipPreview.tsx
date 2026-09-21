@@ -1,8 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { formatDate, formatMoney } from "@/lib/format";
-import { fontPairCssVars } from "@/lib/fonts";
+import { companyNumberLine, formatDate, formatMoney } from "@/lib/format";
+import { DEFAULT_FONT_PAIR, fontPairCssVars, resolveFontPair } from "@/lib/fonts";
 import type { Business, Payslip } from "@/lib/types";
 
 export function PayslipPreview({
@@ -15,7 +15,9 @@ export function PayslipPreview({
   logoDataUrl?: string;
 }) {
   const accent = slip.accentColor || business.accentColor || "#0f766e";
-  const vars = fontPairCssVars(slip.fontPair || business.fontPair) as CSSProperties;
+  const vars = fontPairCssVars(
+    resolveFontPair(slip.fontPair || business.fontPair),
+  ) as CSSProperties;
 
   return (
     <div
@@ -46,6 +48,7 @@ export function PayslipPreview({
                 business.address,
                 [business.city, business.postalCode].filter(Boolean).join(" "),
                 business.country,
+                companyNumberLine(business.companyNumber),
                 business.taxId ? `Tax ID ${business.taxId}` : "",
               ]
                 .filter(Boolean)

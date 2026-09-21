@@ -10,7 +10,8 @@ export type InvoiceVisibleField =
   | "notes"
   | "payment"
   | "vat"
-  | "subtotal";
+  | "subtotal"
+  | "companyNumber";
 
 export type InvoiceVisibility = Partial<Record<InvoiceVisibleField, boolean>>;
 
@@ -28,6 +29,7 @@ export const DEFAULT_INVOICE_VISIBILITY: ResolvedInvoiceVisibility = {
   payment: true,
   vat: true,
   subtotal: true,
+  companyNumber: true,
 };
 
 export const INVOICE_VISIBILITY_OPTIONS: {
@@ -41,6 +43,7 @@ export const INVOICE_VISIBILITY_OPTIONS: {
   { key: "billTo", label: "Bill to" },
   { key: "logo", label: "Logo" },
   { key: "businessName", label: "Business name" },
+  { key: "companyNumber", label: "Company No." },
   { key: "vat", label: "VAT" },
   { key: "subtotal", label: "Subtotal" },
   { key: "notes", label: "Notes" },

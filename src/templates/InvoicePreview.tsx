@@ -19,9 +19,9 @@ import type {
 } from "@/lib/types";
 import type { InvoiceVisibility } from "@/lib/invoice-visibility";
 import { isVisible, resolveVisibility } from "@/lib/invoice-visibility";
-import { formatDate, formatMoney } from "@/lib/format";
+import { companyNumberLine, formatDate, formatMoney } from "@/lib/format";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "@/lib/templates/catalog";
-import { fontPairCssVars } from "@/lib/fonts";
+import { DEFAULT_FONT_PAIR, fontPairCssVars } from "@/lib/fonts";
 import { clampLogoSizePx, DEFAULT_LOGO_SIZE_PX } from "@/lib/logo-size";
 import { DecorationLayer, DecorationMediaContext } from "@/components/DecorationLayer";
 import {
@@ -44,7 +44,7 @@ import {
 
 const LogoVisibleCtx = createContext(true);
 const InlineLogoCtx = createContext(true);
-const FontPairCtx = createContext<FontPair>("editorial");
+const FontPairCtx = createContext<FontPair>(DEFAULT_FONT_PAIR);
 const LogoSizeCtx = createContext(DEFAULT_LOGO_SIZE_PX);
 
 export interface InvoiceViewModel {
@@ -78,9 +78,11 @@ export interface InvoiceViewModel {
   customTemplate?: CustomTemplate | null;
   /**
    * SARS VAT compliance tier (derived from the VAT-inclusive total, ZAR).
-   * Present on invoices; undefined/ignored for quotes.
+   * Set only when this document is a SARS tax invoice.
    */
   sarsMode?: SarsVatMode;
+  /** When true, print as Tax Invoice and apply SARS send gates. */
+  sarsTaxInvoice?: boolean;
 }
 
 const SheetDecorCtx = createContext<InvoiceDecoration[]>([]);
@@ -90,11 +92,12 @@ function show(doc: InvoiceViewModel, field: Parameters<typeof isVisible>[1]) {
 }
 
 /**
- * The SARS-compliant document title.
- * Quotes keep "Quote"; all invoice tiers show "Tax Invoice".
+ * Quotes stay “Quote”. SARS tax invoices print “Tax Invoice”.
+ * Everyone else gets a normal “Invoice”.
  */
 function sheetTitle(doc: InvoiceViewModel) {
-  return isQuote(doc.kind) ? "Quote" : "Tax Invoice";
+  if (isQuote(doc.kind)) return "Quote";
+  return doc.sarsTaxInvoice ? "Tax Invoice" : "Invoice";
 }
 
 
@@ -233,6 +236,7 @@ function partyLines(p: PartySnapshot, phone?: string, vatLabel = "Tax ID") {
     p.country,
     phone,
     p.email,
+    companyNumberLine(p.companyNumber),
     p.taxId ? `${vatLabel} ${p.taxId}` : "",
   ].filter(Boolean);
 }
@@ -518,27 +522,25 @@ function DueCard({
 }) {
   const totalsAccent = useSectionAccent("totals", accent);
 
-  // SARS §20 / §20(5): Method 1 — always show subtotal + VAT + total for invoices.
-  // Quotes respect the user's visibility toggles.
   const isInvoice = !isQuote(doc.kind);
-  const showSub = isInvoice || show(doc, "subtotal");
-  const showVatRows = isInvoice || show(doc, "vat");
+  const forceSarsTotals = isInvoice && Boolean(doc.sarsTaxInvoice);
+  const showSub = forceSarsTotals || show(doc, "subtotal");
+  const showVatRows = forceSarsTotals || show(doc, "vat");
 
-  // For invoices, always render at least one VAT row (even when tax is R0).
   const vatRows =
     doc.totals.taxByRate.length > 0
       ? doc.totals.taxByRate
-      : isInvoice
+      : forceSarsTotals
         ? [{ rate: 0, taxable: doc.totals.subtotal, tax: 0 }]
         : [];
 
-  const totalLabel = isInvoice ? "Total incl VAT" : amountDueLabel(doc.kind);
+  const totalLabel = forceSarsTotals ? "Total incl VAT" : amountDueLabel(doc.kind);
 
   return (
     <EditableSection section="totals" accent={accent} className="ml-auto mt-6 w-[15.5rem] space-y-2 text-[13px]">
       {showSub ? (
         <div className={`flex justify-between ${invert ? "text-white/70" : "opacity-65"}`}>
-          <span>{isInvoice ? "Subtotal excl VAT" : "Subtotal"}</span>
+          <span>{forceSarsTotals ? "Subtotal excl VAT" : "Subtotal"}</span>
           <span className="tabular-nums">{formatMoney(doc.totals.subtotal, doc.currency)}</span>
         </div>
       ) : null}
@@ -1083,7 +1085,12 @@ function Slate({ doc, accent, logo }: Ctx) {
                   fallback="Advisory"
                 />
                 <p className="mt-1 font-[family-name:var(--font-mono)] text-[11px] text-slate-500">
-                  {doc.business.taxId || doc.business.email}
+                  {[
+                    companyNumberLine(doc.business.companyNumber),
+                    doc.business.taxId || doc.business.email,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </p>
               </div>
             </div>
@@ -1557,6 +1564,9 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
       ? {
           ...doc.business,
           logoDataUrl: visibility.logo ? doc.business.logoDataUrl : undefined,
+          companyNumber: visibility.companyNumber
+            ? doc.business.companyNumber
+            : "",
         }
       : {
           name: "",
@@ -1566,6 +1576,7 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
           postalCode: "",
           country: "",
           taxId: "",
+          companyNumber: "",
           accentColor: doc.business.accentColor,
           fontPair: doc.business.fontPair,
         },
@@ -1629,7 +1640,9 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
       {/* Identity lives on the canvas when a logo shape exists; otherwise the layout logo is used. */}
       <InlineLogoCtx.Provider value={!logoOnCanvas}>
         {/* SARS: use "VAT No." label for supplier/recipient taxId on invoices; quotes keep "Tax ID". */}
-        <VatLabelCtx.Provider value={isQuote(view.kind) ? "Tax ID" : "VAT No."}>
+        <VatLabelCtx.Provider
+          value={isQuote(view.kind) || !view.sarsTaxInvoice ? "Tax ID" : "VAT No."}
+        >
         <DecorationMediaContext.Provider
           value={{
             logoSrc: logo,
@@ -1638,7 +1651,7 @@ export function InvoicePreview({ doc }: { doc: InvoiceViewModel }) {
             logoAccent: accent,
           }}
         >
-          <FontPairCtx.Provider value={view.fontPair || "editorial"}>
+          <FontPairCtx.Provider value={view.fontPair || DEFAULT_FONT_PAIR}>
             <LogoSizeCtx.Provider value={clampLogoSizePx(view.logoSizePx)}>
               <SectionAccentsCtx.Provider value={view.sectionAccents ?? {}}>
                 <SheetDecorCtx.Provider value={decorations}>

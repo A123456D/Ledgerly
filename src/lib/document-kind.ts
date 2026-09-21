@@ -33,6 +33,18 @@ export function documentHref(kind: DocKind | null | undefined, id: string): stri
   return isQuote(kind) ? `/quote?id=${id}` : `/invoice?id=${id}`;
 }
 
+/** List heading: issued number, else who it's for, else a clear untitled draft. */
+export function documentListTitle(doc: {
+  number?: string | null;
+  partyName?: string | null;
+}): string {
+  const number = doc.number?.trim();
+  if (number) return number;
+  const who = doc.partyName?.trim();
+  if (who) return who;
+  return "Untitled draft";
+}
+
 export function documentListHref(kind?: DocKind | null): string {
   return isQuote(kind) ? "/quotes" : "/";
 }

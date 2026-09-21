@@ -11,7 +11,9 @@ import {
   deleteDraftPayslip,
   duplicatePayslip,
 } from "@/lib/payslip-service";
-import { Button, PageHeader, StatusPill } from "@/components/ui";
+import { Button, ButtonLink, PageHeader } from "@/components/ui";
+import { DocumentListItem } from "@/components/DocumentListItem";
+import { documentListTitle } from "@/lib/document-kind";
 
 export function PayslipsPage() {
   const router = useRouter();
@@ -22,6 +24,9 @@ export function PayslipsPage() {
   const business = useLiveQuery(() => db.business.get("default"), []);
   const [busy, setBusy] = useState(false);
   const needsSetup = business && !business.name.trim();
+  const latestDraft = slips?.find((slip) => slip.status === "draft");
+  const drafts = slips?.filter((slip) => slip.status === "draft") ?? [];
+  const issued = slips?.filter((slip) => slip.status !== "draft") ?? [];
 
   async function onNew() {
     setBusy(true);
@@ -51,6 +56,11 @@ export function PayslipsPage() {
         subtitle="Create a staff payslip, issue a number, and download a PDF. Tax lines are amounts you enter."
         actions={
           <>
+            {latestDraft ? (
+              <ButtonLink href={`/payslip?id=${latestDraft.id}`} className="flex-1 sm:flex-none">
+                Continue draft
+              </ButtonLink>
+            ) : null}
             <Button
               variant="secondary"
               className="flex-1 sm:flex-none"
@@ -59,7 +69,12 @@ export function PayslipsPage() {
             >
               Duplicate last
             </Button>
-            <Button className="flex-1 sm:flex-none" onClick={() => void onNew()} disabled={busy}>
+            <Button
+              variant={latestDraft ? "secondary" : "primary"}
+              className="flex-1 sm:flex-none"
+              onClick={() => void onNew()}
+              disabled={busy}
+            >
               New payslip
             </Button>
           </>
@@ -90,49 +105,56 @@ export function PayslipsPage() {
           </Button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {slips.map((slip) => (
-            <div
-              key={slip.id}
-              className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <Link
-                    href={`/payslip?id=${slip.id}`}
-                    className="block truncate font-medium text-[var(--ink)] underline-offset-2 hover:underline"
-                  >
-                    {slip.number || "Draft"}
-                  </Link>
-                  <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
-                    {slip.employee.name || "No employee"} · {formatDate(slip.periodStart)} –{" "}
-                    {formatDate(slip.periodEnd)}
-                  </p>
-                </div>
-                <StatusPill status={slip.status} />
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-2 text-sm">
-                <span className="text-[var(--muted)]">Net</span>
-                <span className="tabular-nums font-medium">
-                  {formatMoney(slip.totals.net, slip.currency)}
-                </span>
-              </div>
-              {slip.status === "draft" ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="mt-2 w-full text-red-700 hover:bg-red-50 hover:text-red-800"
-                  disabled={busy}
-                  onClick={() => {
-                    if (!confirm("Delete this draft?")) return;
-                    void deleteDraftPayslip(slip.id);
-                  }}
-                >
-                  Delete draft
-                </Button>
-              ) : null}
-            </div>
-          ))}
+        <div className="space-y-6">
+          {drafts.length > 0 && issued.length > 0 ? (
+            <h2 className="text-[11px] font-medium uppercase tracking-wider text-[var(--muted)]">
+              Drafts
+            </h2>
+          ) : null}
+          <div className="space-y-3">
+            {drafts.map((slip) => (
+              <DocumentListItem
+                key={slip.id}
+                href={`/payslip?id=${slip.id}`}
+                title={documentListTitle({
+                  number: slip.number,
+                  partyName: slip.employee.name,
+                })}
+                subtitle={`${slip.employee.name.trim() || "No employee"} · ${formatDate(slip.periodStart)} – ${formatDate(slip.periodEnd)}`}
+                status={slip.status}
+                meta="Net"
+                amount={formatMoney(slip.totals.net, slip.currency)}
+                isDraft
+                busy={busy}
+                onDelete={() => {
+                  if (!confirm("Delete this draft?")) return;
+                  void deleteDraftPayslip(slip.id);
+                }}
+              />
+            ))}
+          </div>
+          {drafts.length > 0 && issued.length > 0 ? (
+            <h2 className="text-[11px] font-medium uppercase tracking-wider text-[var(--muted)]">
+              Issued
+            </h2>
+          ) : null}
+          <div className="space-y-3">
+            {issued.map((slip) => (
+              <DocumentListItem
+                key={slip.id}
+                href={`/payslip?id=${slip.id}`}
+                title={documentListTitle({
+                  number: slip.number,
+                  partyName: slip.employee.name,
+                })}
+                subtitle={`${slip.employee.name.trim() || "No employee"} · ${formatDate(slip.periodStart)} – ${formatDate(slip.periodEnd)}`}
+                status={slip.status}
+                meta="Net"
+                amount={formatMoney(slip.totals.net, slip.currency)}
+                isDraft={false}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

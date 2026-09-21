@@ -278,6 +278,12 @@ export function PayslipEditor({ id }: { id: string }) {
             Duplicate
           </Button>
         </div>
+        <a
+          href="#live-preview"
+          className="w-fit text-xs text-[var(--muted)] underline-offset-2 hover:underline lg:hidden"
+        >
+          Jump to live preview
+        </a>
       </div>
 
       {(message || error) && (
@@ -286,7 +292,7 @@ export function PayslipEditor({ id }: { id: string }) {
         </p>
       )}
 
-      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
         <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5">
           <fieldset disabled={locked} className="min-w-0 space-y-4 disabled:opacity-70">
             {clients && clients.length > 0 ? (
@@ -454,13 +460,16 @@ export function PayslipEditor({ id }: { id: string }) {
           </fieldset>
         </div>
 
-        <div className="relative min-w-0 xl:sticky xl:top-20 xl:self-start">
+        <div
+          id="live-preview"
+          className="relative min-w-0 scroll-mt-[calc(var(--nav-h)+0.75rem)]"
+        >
           <p className="mb-2 text-xs uppercase tracking-wider text-[var(--muted)]">
             Live A4 preview
           </p>
           <div
             data-invoice-preview-root="true"
-            className="min-w-0 max-h-[min(70vh,calc(100dvh-8rem))] overflow-x-hidden overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--wash)] p-2 pb-8 sm:p-5"
+            className="min-w-0 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--wash)] p-3 sm:p-5"
           >
             {business ? (
               <InvoiceStage maxScale={1} minScale={0.2}>

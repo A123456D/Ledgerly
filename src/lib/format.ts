@@ -13,6 +13,14 @@ export function formatMoney(
   }
 }
 
+export const COMPANY_NUMBER_MAX_LENGTH = 40;
+
+/** Print line for a CIPC / company registration number. Empty input → "". */
+export function companyNumberLine(value?: string | null): string {
+  const v = (value ?? "").trim().slice(0, COMPANY_NUMBER_MAX_LENGTH);
+  return v ? `Company No. ${v}` : "";
+}
+
 export function formatDate(iso: string, locale = "en-ZA"): string {
   if (!iso) return "";
   const d = new Date(iso);

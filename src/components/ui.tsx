@@ -156,29 +156,50 @@ export function PageHeader({
   );
 }
 
+const buttonVariantClass = {
+  primary:
+    "bg-[var(--accent)] text-white hover:brightness-110 shadow-sm",
+  secondary:
+    "bg-[var(--panel)] text-[var(--ink)] border border-[var(--line)] hover:bg-[var(--wash)]",
+  danger: "bg-red-700 text-white hover:bg-red-600",
+  ghost: "text-[var(--muted)] hover:text-[var(--ink)] hover:bg-[var(--wash)]",
+};
+
+export function buttonClass(
+  variant: keyof typeof buttonVariantClass = "primary",
+  className = "",
+) {
+  return `inline-flex min-h-11 items-center justify-center rounded-md px-3.5 py-2.5 text-base font-medium transition disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:py-2 sm:text-sm ${buttonVariantClass[variant]} ${className}`;
+}
+
 export function Button({
   children,
   variant = "primary",
   className = "",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "danger" | "ghost";
+  variant?: keyof typeof buttonVariantClass;
 }) {
-  const styles = {
-    primary:
-      "bg-[var(--accent)] text-white hover:brightness-110 shadow-sm",
-    secondary:
-      "bg-[var(--panel)] text-[var(--ink)] border border-[var(--line)] hover:bg-[var(--wash)]",
-    danger: "bg-red-700 text-white hover:bg-red-600",
-    ghost: "text-[var(--muted)] hover:text-[var(--ink)] hover:bg-[var(--wash)]",
-  }[variant];
   return (
-    <button
-      className={`inline-flex min-h-11 items-center justify-center rounded-md px-3.5 py-2.5 text-base font-medium transition disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:py-2 sm:text-sm ${styles} ${className}`}
-      {...props}
-    >
+    <button className={buttonClass(variant, className)} {...props}>
       {children}
     </button>
+  );
+}
+
+export function ButtonLink({
+  href,
+  children,
+  variant = "primary",
+  className = "",
+  ...props
+}: React.ComponentProps<typeof Link> & {
+  variant?: keyof typeof buttonVariantClass;
+}) {
+  return (
+    <Link href={href} className={buttonClass(variant, className)} {...props}>
+      {children}
+    </Link>
   );
 }
 

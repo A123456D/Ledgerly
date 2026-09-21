@@ -2,7 +2,7 @@
 
 import { createElement } from "react";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney, companyNumberLine } from "@/lib/format";
 import { resolveVisibility } from "@/lib/invoice-visibility";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "@/lib/templates/catalog";
 import { documentNoun } from "@/lib/document-kind";
@@ -258,6 +258,7 @@ export async function buildInvoicePdfBlobLegacy(
                       .join(" "),
                     doc.business.country,
                     doc.business.email,
+                    companyNumberLine(doc.business.companyNumber),
                     doc.business.taxId ? `VAT No. ${doc.business.taxId}` : "",
                   ]
                     .filter(Boolean)

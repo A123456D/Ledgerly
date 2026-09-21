@@ -7,14 +7,17 @@ import { useMemo, useState } from "react";
 import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/format";
 import { createDraftInvoice, deleteDraftInvoice, duplicateInvoice } from "@/lib/invoice-service";
-import { Button, PageHeader, StatusPill } from "@/components/ui";
+import { Button, ButtonLink, PageHeader, StatusPill } from "@/components/ui";
 import type { DocKind, Invoice } from "@/lib/types";
 import {
   documentHref,
   documentKind,
+  documentListTitle,
   documentNounLower,
   isOverdue,
 } from "@/lib/document-kind";
+import { isSarsTaxInvoiceEnabled } from "@/lib/sars-vat-mode";
+import { DocumentListItem } from "@/components/DocumentListItem";
 
 type InvoiceFilter = "all" | "draft" | "sent" | "partial" | "paid" | "overdue";
 
@@ -30,6 +33,18 @@ function matchesFilter(inv: Invoice, filter: InvoiceFilter): boolean {
   }
 }
 
+function invoiceTitle(inv: Invoice) {
+  return documentListTitle({ number: inv.number, partyName: inv.client.name });
+}
+
+function invoiceSubtitle(inv: Invoice) {
+  const number = inv.number?.trim();
+  const client = inv.client.name.trim();
+  if (number) return client || "No client";
+  if (client) return "Draft";
+  return "No client yet";
+}
+
 const INVOICE_FILTERS: { id: InvoiceFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "draft", label: "Draft" },
@@ -38,6 +53,103 @@ const INVOICE_FILTERS: { id: InvoiceFilter; label: string }[] = [
   { id: "paid", label: "Paid" },
   { id: "overdue", label: "Overdue" },
 ];
+
+function InvoiceTableRow({
+  inv,
+  busy,
+  onDelete,
+}: {
+  inv: Invoice;
+  busy: boolean;
+  onDelete: (id: string) => void;
+}) {
+  const router = useRouter();
+  const href = documentHref(inv.kind, inv.id);
+  const title = invoiceTitle(inv);
+  const isDraft = inv.status === "draft";
+  return (
+    <tr
+      className="cursor-pointer border-b border-[var(--line)] last:border-0 hover:bg-[var(--wash)]/80"
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("a, button")) return;
+        router.push(href);
+      }}
+    >
+      <td className="px-4 py-3">
+        <Link href={href} className="font-medium text-[var(--ink)] hover:underline">
+          {title}
+        </Link>
+      </td>
+      <td className="px-4 py-3 text-[var(--muted)]">
+        {inv.client.name.trim() || "—"}
+      </td>
+      <td className="px-4 py-3">
+        <StatusPill status={inv.status} kind={inv.kind} dueDate={inv.dueDate} />
+      </td>
+      <td className="px-4 py-3 text-[var(--muted)]">{formatDate(inv.issueDate)}</td>
+      <td className="px-4 py-3 text-right tabular-nums">
+        {formatMoney(inv.totals.total, inv.currency)}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <div className="flex justify-end gap-1">
+          <ButtonLink href={href} variant={isDraft ? "primary" : "ghost"}>
+            {isDraft ? "Edit" : "Open"}
+          </ButtonLink>
+          {isDraft ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-red-700 hover:bg-red-50 hover:text-red-800"
+              disabled={busy}
+              onClick={() => onDelete(inv.id)}
+            >
+              Delete
+            </Button>
+          ) : null}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function InvoiceCards({
+  invoices,
+  heading,
+  busy,
+  onDelete,
+}: {
+  invoices: Invoice[];
+  heading?: string;
+  busy: boolean;
+  onDelete: (id: string) => void;
+}) {
+  if (!invoices.length) return null;
+  return (
+    <section className="space-y-3">
+      {heading ? (
+        <h2 className="text-[11px] font-medium uppercase tracking-wider text-[var(--muted)]">
+          {heading}
+        </h2>
+      ) : null}
+      {invoices.map((inv) => (
+        <DocumentListItem
+          key={inv.id}
+          href={documentHref(inv.kind, inv.id)}
+          title={invoiceTitle(inv)}
+          subtitle={invoiceSubtitle(inv)}
+          status={inv.status}
+          kind={inv.kind}
+          dueDate={inv.dueDate}
+          meta={formatDate(inv.issueDate)}
+          amount={formatMoney(inv.totals.total, inv.currency)}
+          isDraft={inv.status === "draft"}
+          busy={busy}
+          onDelete={() => onDelete(inv.id)}
+        />
+      ))}
+    </section>
+  );
+}
 
 export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
   const router = useRouter();
@@ -64,13 +176,28 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
     return documents.filter((inv) => matchesFilter(inv, filter));
   }, [documents, filter, isInvoice]);
 
+  const drafts = useMemo(
+    () => filtered?.filter((inv) => inv.status === "draft") ?? [],
+    [filtered],
+  );
+  const issued = useMemo(
+    () => filtered?.filter((inv) => inv.status !== "draft") ?? [],
+    [filtered],
+  );
+  const latestDraft = documents?.find((inv) => inv.status === "draft");
+  const draftCount = documents?.filter((inv) => inv.status === "draft").length ?? 0;
+
+  const sarsOn = isSarsTaxInvoiceEnabled(business);
+
   const needsSetup =
     kind === "invoice" &&
+    sarsOn &&
     business &&
     (!business.name.trim() || !business.address?.trim() || !business.taxId?.trim());
 
   const showVatNudge =
     kind === "invoice" &&
+    sarsOn &&
     business &&
     !business.taxId?.trim() &&
     !vatNudgeDismissed;
@@ -122,6 +249,11 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
         }
         actions={
           <>
+            {latestDraft ? (
+              <ButtonLink href={documentHref(kind, latestDraft.id)} className="flex-1 sm:flex-none">
+                Continue draft
+              </ButtonLink>
+            ) : null}
             <Button
               variant="secondary"
               className="flex-1 sm:flex-none"
@@ -130,7 +262,12 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
             >
               Duplicate last
             </Button>
-            <Button className="flex-1 sm:flex-none" onClick={onNew} disabled={busy}>
+            <Button
+              variant={latestDraft ? "secondary" : "primary"}
+              className="flex-1 sm:flex-none"
+              onClick={onNew}
+              disabled={busy}
+            >
               New {nounLower}
             </Button>
           </>
@@ -186,6 +323,7 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
               }`}
             >
               {label}
+              {id === "draft" && draftCount > 0 ? ` ${draftCount}` : ""}
             </button>
           ))}
         </div>
@@ -204,7 +342,7 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
               : "Pick a template, add a client, enter lines, then send."}
           </p>
           <Button className="mt-6" onClick={onNew} disabled={busy}>
-            {kind === "quote" ? `Create your first ${nounLower}` : "Create your first SARS-ready invoice"}
+            {kind === "quote" ? `Create your first ${nounLower}` : "Create your first invoice"}
           </Button>
         </div>
       ) : isInvoice && filter !== "all" && filtered.length === 0 ? (
@@ -222,45 +360,19 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
         </div>
       ) : (
         <>
-          <div className="space-y-3 md:hidden">
-            {filtered!.map((inv) => (
-              <div
-                key={inv.id}
-                className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link
-                      href={documentHref(inv.kind, inv.id)}
-                      className="block truncate font-medium text-[var(--ink)] underline-offset-2 hover:underline"
-                    >
-                      {inv.number || "Draft"}
-                    </Link>
-                    <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
-                      {inv.client.name || "No client"}
-                    </p>
-                  </div>
-                  <StatusPill status={inv.status} kind={inv.kind} dueDate={inv.dueDate} />
-                </div>
-                <div className="mt-3 flex items-center justify-between gap-2 text-sm">
-                  <span className="text-[var(--muted)]">{formatDate(inv.issueDate)}</span>
-                  <span className="tabular-nums font-medium">
-                    {formatMoney(inv.totals.total, inv.currency)}
-                  </span>
-                </div>
-                {inv.status === "draft" ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="mt-2 w-full text-red-700 hover:bg-red-50 hover:text-red-800"
-                    disabled={busy}
-                    onClick={() => void onDeleteDraft(inv.id)}
-                  >
-                    Delete draft
-                  </Button>
-                ) : null}
-              </div>
-            ))}
+          <div className="space-y-6 md:hidden">
+            <InvoiceCards
+              invoices={drafts}
+              heading={issued.length ? "Drafts" : undefined}
+              busy={busy}
+              onDelete={onDeleteDraft}
+            />
+            <InvoiceCards
+              invoices={issued}
+              heading={drafts.length ? "Issued" : undefined}
+              busy={busy}
+              onDelete={onDeleteDraft}
+            />
           </div>
 
           <div className="hidden overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--panel)] md:block">
@@ -278,45 +390,41 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered!.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--wash)]/80"
-                  >
-                    <td className="px-4 py-3">
-                      <Link
-                        href={documentHref(inv.kind, inv.id)}
-                        className="font-medium text-[var(--ink)] hover:underline"
-                      >
-                        {inv.number || "Draft"}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-[var(--muted)]">
-                      {inv.client.name || "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusPill status={inv.status} kind={inv.kind} dueDate={inv.dueDate} />
-                    </td>
-                    <td className="px-4 py-3 text-[var(--muted)]">
-                      {formatDate(inv.issueDate)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {formatMoney(inv.totals.total, inv.currency)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {inv.status === "draft" ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="text-red-700 hover:bg-red-50 hover:text-red-800"
-                          disabled={busy}
-                          onClick={() => void onDeleteDraft(inv.id)}
-                        >
-                          Delete
-                        </Button>
-                      ) : null}
+                {drafts.length > 0 && issued.length > 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="bg-[var(--wash)] px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-[var(--muted)]"
+                    >
+                      Drafts · {drafts.length}
                     </td>
                   </tr>
+                ) : null}
+                {drafts.map((inv) => (
+                  <InvoiceTableRow
+                    key={inv.id}
+                    inv={inv}
+                    busy={busy}
+                    onDelete={onDeleteDraft}
+                  />
+                ))}
+                {drafts.length > 0 && issued.length > 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="bg-[var(--wash)] px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-[var(--muted)]"
+                    >
+                      Issued · {issued.length}
+                    </td>
+                  </tr>
+                ) : null}
+                {issued.map((inv) => (
+                  <InvoiceTableRow
+                    key={inv.id}
+                    inv={inv}
+                    busy={busy}
+                    onDelete={onDeleteDraft}
+                  />
                 ))}
               </tbody>
             </table>

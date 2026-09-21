@@ -1,6 +1,6 @@
 import { db, getBusiness, getSettings } from "./db";
 import { getCustomTemplate } from "./custom-templates";
-import { addDaysISO, todayISO, uid } from "./format";
+import { todayISO, uid } from "./format";
 import { calculateTotals } from "./invoice-math";
 import {
   bumpSequenceForUsedNumber,
@@ -24,7 +24,7 @@ import {
   type TemplateId,
 } from "./types";
 import { documentKind, documentNounLower, isQuote } from "./document-kind";
-import { sarsModeFromDoc } from "./sars-vat-mode";
+import { isSarsTaxInvoiceEnabled, sarsModeFromDoc } from "./sars-vat-mode";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "./templates/catalog";
 import {
@@ -179,6 +179,7 @@ export function businessToParty(
     postalCode: business.postalCode,
     country: business.country,
     taxId: business.taxId,
+    companyNumber: business.companyNumber?.trim() ?? "",
     logoDataUrl: resolveLogoDataUrl(business, logoId),
     accentColor: business.accentColor,
     fontPair: business.fontPair,
@@ -212,6 +213,7 @@ export async function createDraftInvoice(options?: {
   let lineItems = [emptyLine(business.defaultTaxRate)];
   let notes = "";
   let paymentInstructions = business.paymentTerms;
+  let dueDate = "";
   let templateId: TemplateId = settings.defaultTemplate;
   let accentColor = business.accentColor;
   let fontPair = business.fontPair;
@@ -235,8 +237,8 @@ export async function createDraftInvoice(options?: {
         id: uid("line"),
       }));
       notes = source.notes;
-      paymentInstructions =
-        source.paymentInstructions || business.paymentTerms;
+      paymentInstructions = source.paymentInstructions;
+      dueDate = source.dueDate ?? "";
       templateId = source.templateId;
       accentColor = source.accentColor;
       fontPair = source.fontPair ?? business.fontPair;
@@ -270,7 +272,7 @@ export async function createDraftInvoice(options?: {
     clientId,
     client,
     issueDate,
-    dueDate: addDaysISO(issueDate, business.netDays),
+    dueDate,
     currency,
     taxMode,
     templateId,
@@ -452,6 +454,7 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     lineItems: linked.lineItems.map((l) => ({ ...l })),
     totals,
     visibility: linked.visibility ? { ...linked.visibility } : undefined,
+    sarsTaxInvoice: isSarsTaxInvoiceEnabled(business),
     logoSizePx: linked.logoSizePx ?? business.defaultLogoSizePx,
     sectionAccents: linked.sectionAccents
       ? { ...linked.sectionAccents }
@@ -719,7 +722,8 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
       ),
       customTemplate: customFromSnapshot(invoice.snapshot),
     };
-    if (!isQuote(invoice.kind)) {
+    if (!isQuote(invoice.kind) && (invoice.snapshot.sarsTaxInvoice ?? true)) {
+      doc.sarsTaxInvoice = true;
       doc.sarsMode = sarsModeFromDoc(doc);
     }
     return doc;
@@ -754,9 +758,6 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
     sectionAccents: invoice.sectionAccents,
     decorations: invoice.decorations,
   };
-  if (!isQuote(invoice.kind)) {
-    draftDoc.sarsMode = sarsModeFromDoc(draftDoc);
-  }
   return draftDoc;
 }
 
@@ -863,7 +864,8 @@ export async function displayDocumentLive(
     sectionAccents: invoice.sectionAccents,
     decorations,
   };
-  if (!isQuote(invoice.kind)) {
+  if (!isQuote(invoice.kind) && isSarsTaxInvoiceEnabled(business)) {
+    liveDoc.sarsTaxInvoice = true;
     liveDoc.sarsMode = sarsModeFromDoc(liveDoc);
   }
   return liveDoc;

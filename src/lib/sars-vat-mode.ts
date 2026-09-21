@@ -40,6 +40,18 @@ export function sarsModeFromDoc(
   return deriveSarsMode(doc.totals.total, hasZeroRated);
 }
 
+/**
+ * SARS tax-invoice mode is opt-in. Explicit false stays off.
+ * Legacy records with no flag follow whether a VAT number was already saved.
+ */
+export function isSarsTaxInvoiceEnabled(
+  business: { vatRegistered?: boolean; taxId?: string } | null | undefined,
+): boolean {
+  if (!business) return false;
+  if (typeof business.vatRegistered === "boolean") return business.vatRegistered;
+  return Boolean(business.taxId?.trim());
+}
+
 /** Short UI label for the badge. */
 export function sarsModeLabel(mode: SarsVatMode): string {
   switch (mode) {

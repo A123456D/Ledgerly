@@ -1,15 +1,18 @@
 import type { CSSProperties } from "react";
 import type { FontPair } from "@/lib/types";
 
+/** Product default: Outfit geometric sans for app chrome and new documents. */
+export const DEFAULT_FONT_PAIR: FontPair = "modern";
+
 export const FONT_PAIR_OPTIONS: {
   id: FontPair;
   label: string;
   blurb: string;
 }[] = [
   {
-    id: "classic",
-    label: "Classic",
-    blurb: "Traditional serif — formal invoices",
+    id: "modern",
+    label: "Modern",
+    blurb: "Geometric sans throughout",
   },
   {
     id: "editorial",
@@ -17,9 +20,9 @@ export const FONT_PAIR_OPTIONS: {
     blurb: "Serif headlines + clean sans body",
   },
   {
-    id: "modern",
-    label: "Modern",
-    blurb: "Geometric sans throughout",
+    id: "classic",
+    label: "Classic",
+    blurb: "Traditional serif — formal invoices",
   },
   {
     id: "mono",
@@ -46,29 +49,32 @@ export const ACCENT_PRESETS = [
  * Remap Next font CSS variables on the invoice root so templates
  * (which use --font-display / --font-body / --font-mono) actually change.
  */
-export function fontPairCssVars(pair: FontPair = "editorial"): CSSProperties {
+export function resolveFontPair(pair?: FontPair | null): FontPair {
+  return pair ?? DEFAULT_FONT_PAIR;
+}
+
+export function fontPairCssVars(pair: FontPair = DEFAULT_FONT_PAIR): CSSProperties {
   switch (pair) {
     case "classic":
       return {
         ["--font-display" as string]: "var(--font-classic-display)",
         ["--font-body" as string]: "var(--font-editorial-body)",
       };
-    case "modern":
+    case "editorial":
       return {
-        ["--font-display" as string]: "var(--font-modern)",
-        ["--font-body" as string]: "var(--font-modern)",
+        ["--font-display" as string]: "var(--font-editorial-display)",
+        ["--font-body" as string]: "var(--font-editorial-body)",
       };
     case "mono":
       return {
         ["--font-display" as string]: "var(--font-mono)",
         ["--font-body" as string]: "var(--font-mono)",
       };
-    case "editorial":
+    case "modern":
     default:
       return {
-        // Keep layout defaults (Fraunces + Source Sans) — set explicitly for PDF clones
-        ["--font-display" as string]: "var(--font-editorial-display)",
-        ["--font-body" as string]: "var(--font-editorial-body)",
+        ["--font-display" as string]: "var(--font-modern)",
+        ["--font-body" as string]: "var(--font-modern)",
       };
   }
 }
