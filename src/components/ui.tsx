@@ -10,7 +10,8 @@ import { PwaRegister } from "@/components/PwaRegister";
 import { AutoBackupRunner } from "@/components/AutoBackupRunner";
 import { assetUrl } from "@/lib/asset";
 import { APP_NAME, BRAND_MARK_PATH } from "@/lib/brand";
-import { statusDisplay } from "@/lib/document-kind";
+import { formatDate } from "@/lib/format";
+import { isOverdue, statusDisplay } from "@/lib/document-kind";
 import type { DocKind } from "@/lib/types";
 import { parseNonNegativeDecimal } from "@/lib/decimal-input";
 
@@ -262,22 +263,35 @@ export function DecimalInput({
 export function StatusPill({
   status,
   kind,
+  dueDate,
 }: {
   status: string;
   kind?: DocKind | null;
+  dueDate?: string;
 }) {
+  const overdue = isOverdue(status, dueDate, kind);
+  const displayKey = overdue ? "overdue" : status;
+
   const map: Record<string, string> = {
     draft: "bg-amber-100 text-amber-900",
-    issued: "bg-teal-100 text-teal-900",
+    issued: "bg-sky-100 text-sky-900",
+    partial: "bg-teal-100 text-teal-900",
     paid: "bg-emerald-100 text-emerald-900",
+    overdue: "bg-rose-100 text-rose-900",
     accepted: "bg-emerald-100 text-emerald-900",
     declined: "bg-rose-100 text-rose-800",
     void: "bg-neutral-200 text-neutral-600",
   };
-  const label = statusDisplay(status, kind);
+
+  const label = overdue ? "Overdue" : statusDisplay(status);
+  const title = overdue && dueDate
+    ? `Due ${formatDate(dueDate)} · ${statusDisplay(status)}`
+    : undefined;
+
   return (
     <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${map[status] || "bg-neutral-100"}`}
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium capitalize ${map[displayKey] ?? "bg-neutral-100 text-neutral-700"}`}
+      title={title}
     >
       {label}
     </span>

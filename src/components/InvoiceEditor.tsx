@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, DecimalInput, Field, StatusPill, inputClass } from "@/components/ui";
-import { formatDate, formatMoney, uid } from "@/lib/format";
+import { formatDate, formatMoney, todayISO, uid } from "@/lib/format";
 import {
   clientToParty,
   displayDocumentLive,
@@ -18,6 +18,7 @@ import {
   saveInvoice,
   deleteDraftInvoice,
   convertQuoteToInvoice,
+  recordPartialPayment,
   updateIssuedDocumentNumber,
 } from "@/lib/invoice-service";
 import { downloadInvoicePdf } from "@/lib/pdf/download";
@@ -81,6 +82,7 @@ import {
   documentHref,
   documentListHref,
   dueDateLabel,
+  isOverdue,
   issueDateLabel,
   isQuote,
 } from "@/lib/document-kind";
@@ -111,6 +113,7 @@ export function InvoiceEditor({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [partialOpen, setPartialOpen] = useState(false);
   const [selectedSection, setSelectedSection] = useState<InvoiceSectionId | null>(
     null,
   );
@@ -705,6 +708,22 @@ export function InvoiceEditor({ id }: { id: string }) {
     }
   }
 
+  async function onSavePartial(amount: number, date: string) {
+    if (!invoice) return;
+    setBusy(true);
+    setError("");
+    try {
+      const next = await recordPartialPayment(invoice.id, amount, date);
+      setInvoice(next);
+      setPartialOpen(false);
+      setMessage(`Partial payment of ${formatMoney(amount, invoice.currency)} recorded`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not record payment");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onConvertToInvoice() {
     if (!invoice) return;
     const current = invoice;
@@ -757,7 +776,7 @@ export function InvoiceEditor({ id }: { id: string }) {
             <h1 className="min-w-0 break-all font-[family-name:var(--font-display)] text-xl text-[var(--ink)] sm:text-3xl">
               {invoice.number || peekNumber || "Draft"}
             </h1>
-            <StatusPill status={invoice.status} kind={invoice.kind} />
+            <StatusPill status={invoice.status} kind={invoice.kind} dueDate={invoice.dueDate} />
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -811,10 +830,25 @@ export function InvoiceEditor({ id }: { id: string }) {
                   </Button>
                 </>
               ) : null}
-              {!quoteDoc && invoice.status === "issued" ? (
+              {!quoteDoc && (invoice.status === "issued" || invoice.status === "partial") ? (
                 <Button variant="secondary" className="shrink-0" onClick={() => onStatus("paid")} disabled={busy}>
                   Mark paid
                 </Button>
+              ) : null}
+              {!quoteDoc && invoice.status === "issued" ? (
+                <Button variant="ghost" className="shrink-0" onClick={() => setPartialOpen(true)} disabled={busy}>
+                  Record partial…
+                </Button>
+              ) : null}
+              {!quoteDoc && invoice.status === "partial" ? (
+                <>
+                  <Button variant="ghost" className="shrink-0" onClick={() => setPartialOpen(true)} disabled={busy}>
+                    Edit partial…
+                  </Button>
+                  <Button variant="ghost" className="shrink-0" onClick={() => onStatus("issued")} disabled={busy}>
+                    Mark unpaid
+                  </Button>
+                </>
               ) : null}
               {!quoteDoc && invoice.status === "paid" ? (
                 <Button variant="ghost" className="shrink-0" onClick={() => onStatus("issued")} disabled={busy}>
@@ -858,6 +892,20 @@ export function InvoiceEditor({ id }: { id: string }) {
         <p className="mb-3 text-xs text-[var(--muted)]">
           Last sent {formatDate(invoice.lastSentAt.slice(0, 10))}
           {invoice.lastSentTo ? ` to ${invoice.lastSentTo}` : ""}
+        </p>
+      ) : null}
+
+      {!quoteDoc && isOverdue(invoice.status, invoice.dueDate) ? (
+        <p className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          This invoice is past due ({formatDate(invoice.dueDate)}).
+        </p>
+      ) : null}
+
+      {!quoteDoc && invoice.status === "partial" && invoice.amountPaid != null ? (
+        <p className="mb-3 rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-800">
+          Partial payment of {formatMoney(invoice.amountPaid, invoice.currency)} recorded
+          {invoice.paidAt ? ` on ${formatDate(invoice.paidAt)}` : ""}.
+          {" "}Balance: {formatMoney(Math.max(0, invoice.totals.total - invoice.amountPaid), invoice.currency)}.
         </p>
       ) : null}
 
@@ -1686,6 +1734,110 @@ export function InvoiceEditor({ id }: { id: string }) {
           }}
         />
       ) : null}
+
+      {partialOpen && invoice ? (
+        <RecordPartialSheet
+          total={invoice.totals.total}
+          currency={invoice.currency}
+          existing={invoice.amountPaid}
+          existingDate={invoice.paidAt}
+          busy={busy}
+          onSave={onSavePartial}
+          onCancel={() => setPartialOpen(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function RecordPartialSheet({
+  total,
+  currency,
+  existing,
+  existingDate,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  total: number;
+  currency: string;
+  existing?: number;
+  existingDate?: string;
+  busy: boolean;
+  onSave: (amount: number, date: string) => void;
+  onCancel: () => void;
+}) {
+  const [amountRaw, setAmountRaw] = useState(
+    existing != null ? existing.toFixed(2) : "",
+  );
+  const [date, setDate] = useState(existingDate ?? todayISO());
+  const [localError, setLocalError] = useState("");
+
+  const amount = parseFloat(amountRaw) || 0;
+  const remaining = Math.max(0, total - amount);
+
+  function handleSave() {
+    if (amount <= 0) {
+      setLocalError("Amount must be greater than 0");
+      return;
+    }
+    if (amount >= total) {
+      setLocalError("Use Mark paid for a full payment");
+      return;
+    }
+    setLocalError("");
+    onSave(amount, date);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <div className="w-full max-w-md rounded-t-2xl bg-[var(--panel)] p-5 shadow-xl sm:rounded-2xl">
+        <h2 className="mb-4 text-base font-semibold text-[var(--ink)]">
+          Record partial payment
+        </h2>
+        <div className="space-y-4">
+          <Field label={`Amount (${currency})`}>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              className={inputClass}
+              value={amountRaw}
+              placeholder="0.00"
+              autoFocus
+              onChange={(e) => setAmountRaw(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Balance left:{" "}
+              {formatMoney(remaining, currency)}
+            </p>
+          </Field>
+          <Field label="Date">
+            <input
+              type="date"
+              className={inputClass}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </Field>
+          {localError ? (
+            <p className="text-sm text-red-700">{localError}</p>
+          ) : null}
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <Button variant="ghost" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={busy}>
+            Save
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

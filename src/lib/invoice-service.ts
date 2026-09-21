@@ -1,4 +1,4 @@
-import { db, getBusiness, getSettings, saveSettings } from "./db";
+import { db, getBusiness, getSettings } from "./db";
 import { getCustomTemplate } from "./custom-templates";
 import { addDaysISO, todayISO, uid } from "./format";
 import { calculateTotals } from "./invoice-math";
@@ -471,9 +471,15 @@ export async function issueInvoice(id: string): Promise<Invoice> {
     updatedAt: new Date().toISOString(),
   };
 
-  await db.transaction("rw", db.invoices, db.settings, db.clients, async () => {
+  // invoices + settings only — do not call ensureDefaults() in here (it reads
+  // `business` and throws NotFoundError if that store is not in the transaction).
+  await db.transaction("rw", db.invoices, db.settings, async () => {
     await db.invoices.put(issued);
-    await saveSettings(sequencePatch(quote, nextState));
+    await db.settings.put({
+      ...settings,
+      ...sequencePatch(quote, nextState),
+      id: "default",
+    });
   });
 
   void import("@/lib/auto-backup").then(({ createAutoBackup }) =>
@@ -535,7 +541,11 @@ export async function updateIssuedDocumentNumber(
 
   await db.transaction("rw", db.invoices, db.settings, async () => {
     await db.invoices.put(next);
-    await saveSettings(sequencePatch(quote, nextState));
+    await db.settings.put({
+      ...settings,
+      ...sequencePatch(quote, nextState),
+      id: "default",
+    });
   });
 
   return next;
@@ -554,16 +564,49 @@ export async function markInvoiceStatus(
     throw new Error("Void documents cannot be reopened");
   }
   if (isQuote(invoice.kind)) {
-    if (status === "paid") {
+    if (status === "paid" || status === "partial") {
       throw new Error("Quotes cannot be marked paid — convert to an invoice");
     }
     if (status === "issued" && invoice.status !== "issued") {
       throw new Error("Quotes cannot return to sent once accepted or declined");
     }
   }
+  const now = new Date().toISOString();
+  // Clear payment record when returning to unpaid (issued) or going fully paid.
+  const clearPayments = status === "issued" || status === "paid";
   const next: Invoice = {
     ...invoice,
     status,
+    amountPaid: clearPayments ? undefined : invoice.amountPaid,
+    paidAt: clearPayments ? undefined : invoice.paidAt,
+    updatedAt: now,
+  };
+  await db.invoices.put(next);
+  return next;
+}
+
+/**
+ * Record a partial payment against an invoice.
+ * Sets status → "partial" and stores amountPaid + paidAt.
+ */
+export async function recordPartialPayment(
+  id: string,
+  amount: number,
+  date: string,
+): Promise<Invoice> {
+  const invoice = await db.invoices.get(id);
+  if (!invoice) throw new Error("Document not found");
+  if (invoice.status === "draft") throw new Error("Issue the invoice first");
+  if (invoice.status === "void") throw new Error("Void invoices cannot be updated");
+  if (isQuote(invoice.kind)) throw new Error("Quotes cannot have partial payments");
+  if (amount <= 0) throw new Error("Amount must be greater than 0");
+  const total = invoice.totals.total;
+  if (amount >= total) throw new Error("Use Mark paid for a full payment");
+  const next: Invoice = {
+    ...invoice,
+    status: "partial",
+    amountPaid: amount,
+    paidAt: date,
     updatedAt: new Date().toISOString(),
   };
   await db.invoices.put(next);

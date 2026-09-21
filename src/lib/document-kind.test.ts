@@ -12,8 +12,11 @@ describe("documentKind", () => {
     expect(documentNoun("quote")).toBe("Quote");
   });
 
-  it("shows sent for issued quotes", () => {
-    expect(statusDisplay("issued", "quote")).toBe("Sent");
-    expect(statusDisplay("issued", "invoice")).toBe("issued");
+  it("shows Sent for issued documents (invoices and quotes)", () => {
+    expect(statusDisplay("issued")).toBe("Sent");
+  });
+
+  it("shows Partial for partial invoices", () => {
+    expect(statusDisplay("partial")).toBe("Partial");
   });
 });

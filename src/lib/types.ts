@@ -4,6 +4,7 @@ export type DocKind = "invoice" | "quote";
 export type InvoiceStatus =
   | "draft"
   | "issued"
+  | "partial"
   | "paid"
   | "void"
   | "accepted"
@@ -296,6 +297,10 @@ export interface Invoice {
   /** Decorative shapes / text on the invoice canvas */
   decorations?: InvoiceDecoration[];
   snapshot?: IssuedSnapshot;
+  /** Amount paid so far (set when status === "partial"). Cleared on full payment or unpaid. */
+  amountPaid?: number;
+  /** ISO date of the partial payment record */
+  paidAt?: string;
   lastSentAt?: string;
   lastSentTo?: string;
   createdAt: string;
