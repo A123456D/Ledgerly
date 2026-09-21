@@ -582,6 +582,10 @@ export async function markInvoiceStatus(
     updatedAt: now,
   };
   await db.invoices.put(next);
+  if (status === "void") {
+    const { unpublishShareForInvoice } = await import("@/lib/share-link-store");
+    await unpublishShareForInvoice(id);
+  }
   return next;
 }
 
