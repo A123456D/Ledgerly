@@ -86,6 +86,12 @@ import {
   issueDateLabel,
   isQuote,
 } from "@/lib/document-kind";
+import {
+  sarsModeFromDoc,
+  sarsModeLabel,
+  sarsModeBadgeClass,
+  sarsInvoiceSendErrors,
+} from "@/lib/sars-vat-mode";
 import { normalizeDocumentNumber } from "@/lib/numbering";
 import type { InvoiceStatus } from "@/lib/types";
 
@@ -100,6 +106,9 @@ export function InvoiceEditor({ id }: { id: string }) {
   const [preview, setPreview] = useState<InvoiceViewModel | null>(null);
   const [peekNumber, setPeekNumber] = useState("");
   const [issuedNumberDraft, setIssuedNumberDraft] = useState("");
+  const [vatNudgeDismissed, setVatNudgeDismissed] = useState(() => {
+    try { return sessionStorage.getItem("vatNudgeDismissed") === "1"; } catch { return false; }
+  });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -199,6 +208,40 @@ export function InvoiceEditor({ id }: { id: string }) {
   const locked = invoice.status !== "draft";
   const quoteDoc = isQuote(invoice.kind);
   const vis = resolveVisibility(invoice.visibility);
+
+  // ── SARS VAT compliance (invoices only) ─────────────────────────────────────
+  const sarsMode = !quoteDoc ? sarsModeFromDoc(invoice) : null;
+  const sarsSendErrors = !quoteDoc
+    ? sarsInvoiceSendErrors(
+        // Pass a minimal doc shape from live invoice state (not yet a full viewmodel)
+        {
+          ...invoice,
+          business: {
+            name: business?.name ?? "",
+            email: business?.email ?? "",
+            address: business?.address ?? "",
+            city: business?.city ?? "",
+            postalCode: business?.postalCode ?? "",
+            country: business?.country ?? "",
+            taxId: business?.taxId ?? "",
+          },
+          number: invoice.number ?? "",
+          logoDataUrl: undefined,
+          accentColor: invoice.accentColor,
+          templateId: invoice.templateId,
+          currency: invoice.currency,
+          status: invoice.status,
+          customTemplate: null,
+        },
+        business ?? null,
+        sarsMode ?? "no-formal",
+      )
+    : [];
+  // Crossing R5 000 with missing client triggers a soft warning (not a hard block on its own)
+  const sarsMissingClientWarning =
+    !quoteDoc &&
+    sarsMode === "full" &&
+    (!invoice.client.name?.trim() || !invoice.client.address?.trim());
 
   function toggleFieldVisibility(key: InvoiceVisibleField) {
     const nextVis = !resolveVisibility(invoice!.visibility)[key];
@@ -525,6 +568,11 @@ export function InvoiceEditor({ id }: { id: string }) {
 
   async function onIssue() {
     if (!invoice) return;
+    // Hard block for SARS non-compliance on invoices
+    if (!quoteDoc && sarsSendErrors.length > 0) {
+      setError(sarsSendErrors[0]);
+      return;
+    }
     const current = invoice;
     setBusy(true);
     setError("");
@@ -825,6 +873,15 @@ export function InvoiceEditor({ id }: { id: string }) {
           >
             Send
           </Button>
+          {/* SARS compliance badge — invoices only, always visible near Send */}
+          {sarsMode ? (
+            <span
+              className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${sarsModeBadgeClass(sarsMode)}`}
+              title={`SARS Tax Invoice tier: ${sarsModeLabel(sarsMode)}`}
+            >
+              {sarsModeLabel(sarsMode)} Tax Invoice
+            </span>
+          ) : null}
           <Button variant="ghost" className="shrink-0" onClick={onDuplicate} disabled={busy}>
             Duplicate
           </Button>
@@ -857,6 +914,53 @@ export function InvoiceEditor({ id }: { id: string }) {
           {error || message}
         </p>
       )}
+
+      {/* SARS send-gate warnings — only shown on draft invoices with problems */}
+      {!quoteDoc && !locked && sarsSendErrors.length > 0 ? (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700">
+            Tax Invoice — Send blocked
+          </p>
+          <ul className="space-y-0.5 text-xs text-red-700">
+            {sarsSendErrors.map((err) => (
+              <li key={err}>· {err}</li>
+            ))}
+          </ul>
+        </div>
+      ) : sarsMissingClientWarning && !locked ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs text-amber-800">
+            <span className="font-semibold">Full Tax Invoice:</span> total exceeds R5 000 — client
+            name and address are required before you can send. Add them in the Bill To section.
+          </p>
+        </div>
+      ) : null}
+
+      {!quoteDoc && business && !business.taxId?.trim() && !vatNudgeDismissed ? (
+        <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="font-medium">Add your VAT No. to send tax invoices</p>
+            <p className="mt-0.5 text-amber-800">
+              SARS needs your 10-digit VAT number on Tax Invoices. Add it in Settings — takes a minute.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Link href="/settings" className="inline-flex items-center rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800">
+              Add VAT No.
+            </Link>
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+              onClick={() => {
+                setVatNudgeDismissed(true);
+                try { sessionStorage.setItem("vatNudgeDismissed", "1"); } catch { /* ignore */ }
+              }}
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex min-w-0 flex-col gap-6 xl:flex-row xl:items-start">
         <div className="min-w-0 space-y-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 sm:p-5 xl:flex-1">
@@ -959,10 +1063,18 @@ export function InvoiceEditor({ id }: { id: string }) {
                   }
                 />
               </Field>
-              <Field label="Client tax ID">
+              <Field
+                label={quoteDoc ? "Client tax ID" : "Client VAT No."}
+                hint={
+                  quoteDoc
+                    ? undefined
+                    : "Optional on abridged (≤ R5 000). Required on the PDF when the client is VAT-registered and total > R5 000."
+                }
+              >
                 <input
                   className={inputClass}
                   value={invoice.client.taxId}
+                  placeholder={quoteDoc ? undefined : "10 digits"}
                   onChange={(e) =>
                     update({ client: { ...invoice.client, taxId: e.target.value } })
                   }
@@ -1027,6 +1139,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                     {fieldShowCheckbox("issueDate")}
                   </span>
                 }
+                hint={!quoteDoc ? "SARS requires issue within 21 days of supply." : undefined}
               >
                 <div className="flex gap-2">
                   <input
@@ -1082,7 +1195,14 @@ export function InvoiceEditor({ id }: { id: string }) {
                   }
                 />
               </Field>
-              <Field label="VAT mode">
+              <Field
+                label="Line prices"
+                hint={
+                  invoice.taxMode === "exclusive"
+                    ? "Line Amount = Qty × Rate (VAT added in totals)."
+                    : "Line Amount = Qty × Rate (VAT portion shown in totals)."
+                }
+              >
                 <select
                   className={inputClass}
                   value={invoice.taxMode}
@@ -1090,8 +1210,8 @@ export function InvoiceEditor({ id }: { id: string }) {
                     update({ taxMode: e.target.value as TaxMode })
                   }
                 >
-                  <option value="exclusive">Exclusive (add VAT)</option>
-                  <option value="inclusive">Inclusive (VAT in price)</option>
+                  <option value="exclusive">Excl. VAT — Rate is before tax</option>
+                  <option value="inclusive">Incl. VAT — Rate already includes tax</option>
                 </select>
               </Field>
             </div>
@@ -1128,7 +1248,7 @@ export function InvoiceEditor({ id }: { id: string }) {
               <div className="hidden border-b border-[var(--line)] bg-[var(--wash)]/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted)] lg:grid lg:grid-cols-[minmax(0,1fr)_4.25rem_5.5rem_3.75rem_3.75rem_5.5rem_3.25rem] lg:gap-2">
                 <span>Description</span>
                 <span className="text-right">Qty</span>
-                <span className="text-right">Rate</span>
+                <span className="text-right">{invoice.taxMode === "exclusive" ? "Rate excl." : "Rate incl."}</span>
                 <span className="text-right">VAT %</span>
                 <span className="text-right">Disc %</span>
                 <span className="text-right">Amount</span>
@@ -1177,7 +1297,7 @@ export function InvoiceEditor({ id }: { id: string }) {
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-[var(--muted)] lg:sr-only">
-                            Rate ({invoice.currency})
+                            {invoice.taxMode === "exclusive" ? "Rate excl." : "Rate incl."} ({invoice.currency})
                           </label>
                           <DecimalInput
                             value={line.unitPrice}
@@ -1242,7 +1362,7 @@ export function InvoiceEditor({ id }: { id: string }) {
 
               <div className="border-t border-[var(--line)] bg-[var(--wash)]/40 px-3 py-3 text-right sm:px-4">
                 <p className="text-sm font-semibold tabular-nums">
-                  Total {formatMoney(invoice.totals.total, invoice.currency)}
+                  Total incl. VAT {formatMoney(invoice.totals.total, invoice.currency)}
                 </p>
               </div>
             </div>
@@ -1600,6 +1720,7 @@ export function InvoiceEditor({ id }: { id: string }) {
           doc={preview}
           fromName={business?.name}
           fromEmail={business?.email}
+          sarsErrors={sarsSendErrors}
           onSent={async ({ to }) => {
             const next: Invoice = {
               ...invoice,

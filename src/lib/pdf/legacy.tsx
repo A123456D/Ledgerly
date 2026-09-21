@@ -258,7 +258,7 @@ export async function buildInvoicePdfBlobLegacy(
                       .join(" "),
                     doc.business.country,
                     doc.business.email,
-                    doc.business.taxId ? `Tax ID: ${doc.business.taxId}` : "",
+                    doc.business.taxId ? `VAT No. ${doc.business.taxId}` : "",
                   ]
                     .filter(Boolean)
                     .join("\n"),
@@ -340,7 +340,7 @@ export async function buildInvoicePdfBlobLegacy(
                   .join(" "),
                 doc.client.country,
                 doc.client.email,
-                doc.client.taxId ? `Tax ID: ${doc.client.taxId}` : "",
+                doc.client.taxId ? `VAT No. ${doc.client.taxId}` : "",
               ]
                 .filter(Boolean)
                 .join("\n"),

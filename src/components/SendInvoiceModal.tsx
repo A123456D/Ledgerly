@@ -22,6 +22,7 @@ export function SendInvoiceModal({
   fromName,
   fromEmail,
   onSent,
+  sarsErrors = [],
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,6 +30,8 @@ export function SendInvoiceModal({
   fromName?: string;
   fromEmail?: string;
   onSent?: (info: { to: string }) => void;
+  /** SARS send-gate errors; non-empty blocks sending. */
+  sarsErrors?: string[];
 }) {
   const defaults = defaultSendCopy(doc, fromName);
   const [to, setTo] = useState(defaults.to);
@@ -179,6 +182,19 @@ export function SendInvoiceModal({
           </Button>
         </div>
 
+        {sarsErrors.length > 0 ? (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700">
+              Tax Invoice — Send blocked
+            </p>
+            <ul className="space-y-0.5 text-xs text-red-700">
+              {sarsErrors.map((err) => (
+                <li key={err}>· {err}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--wash)]/50 p-3">
           <p className="text-sm font-medium text-[var(--ink)]">WhatsApp</p>
           <p className="mt-1 text-xs text-[var(--muted)]">
@@ -197,7 +213,7 @@ export function SendInvoiceModal({
           <div className="mt-3">
             <Button
               type="button"
-              disabled={!waReady || busy}
+              disabled={!waReady || busy || sarsErrors.length > 0}
               onClick={() => void onWhatsApp()}
             >
               {prepBusy
@@ -250,7 +266,7 @@ export function SendInvoiceModal({
         {ok ? <p className="mt-3 text-sm text-teal-800">{ok}</p> : null}
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy || prepBusy}>
+          <Button type="submit" disabled={busy || prepBusy || sarsErrors.length > 0}>
             {busy ? "Preparing…" : "Open email + PDF"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>

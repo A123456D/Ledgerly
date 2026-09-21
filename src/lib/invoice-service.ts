@@ -24,6 +24,7 @@ import {
   type TemplateId,
 } from "./types";
 import { documentKind, documentNounLower, isQuote } from "./document-kind";
+import { sarsModeFromDoc } from "./sars-vat-mode";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "./templates/catalog";
 import {
@@ -691,7 +692,7 @@ function customFromSnapshot(snapshot: IssuedSnapshot): CustomTemplate | null {
 
 export function displayDocument(invoice: Invoice): InvoiceViewModel {
   if (invoice.snapshot) {
-    return {
+    const doc: InvoiceViewModel = {
       kind: documentKind(invoice.kind),
       number: invoice.snapshot.number,
       business: invoice.snapshot.business,
@@ -718,8 +719,12 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
       ),
       customTemplate: customFromSnapshot(invoice.snapshot),
     };
+    if (!isQuote(invoice.kind)) {
+      doc.sarsMode = sarsModeFromDoc(doc);
+    }
+    return doc;
   }
-  return {
+  const draftDoc: InvoiceViewModel = {
     kind: documentKind(invoice.kind),
     number: invoice.number ?? "DRAFT",
     business: {
@@ -749,6 +754,10 @@ export function displayDocument(invoice: Invoice): InvoiceViewModel {
     sectionAccents: invoice.sectionAccents,
     decorations: invoice.decorations,
   };
+  if (!isQuote(invoice.kind)) {
+    draftDoc.sarsMode = sarsModeFromDoc(draftDoc);
+  }
+  return draftDoc;
 }
 
 export async function displayDocumentLive(
@@ -829,7 +838,8 @@ export async function displayDocumentLive(
     decorations = fillLogoImages(decorations, vis.logo ? logoDataUrl : undefined);
   }
 
-  return {
+  const totals = recomputeTotals(invoice);
+  const liveDoc: InvoiceViewModel = {
     kind: documentKind(invoice.kind),
     number: peek,
     business: businessToParty(business, logoId),
@@ -846,11 +856,15 @@ export async function displayDocumentLive(
     notes: invoice.notes,
     paymentInstructions: invoice.paymentInstructions,
     lineItems: invoice.lineItems,
-    totals: recomputeTotals(invoice),
+    totals,
     status: invoice.status,
     visibility: invoice.visibility,
     customTemplate,
     sectionAccents: invoice.sectionAccents,
     decorations,
   };
+  if (!isQuote(invoice.kind)) {
+    liveDoc.sarsMode = sarsModeFromDoc(liveDoc);
+  }
+  return liveDoc;
 }
