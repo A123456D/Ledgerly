@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useState, type ButtonHTMLAttributes } from "react";
 import { ensureDefaults } from "@/lib/db";
 import { InstallAppButton } from "@/components/InstallAppButton";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -30,10 +30,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const isPublicShare = pathname === "/v" || pathname.startsWith("/v/");
 
   useEffect(() => {
+    if (isPublicShare) return;
     ensureDefaults().then(() => setReady(true));
-  }, []);
+  }, [isPublicShare]);
 
   function isActive(link: { href: string }) {
     if (link.href === "/") return pathname === "/" || pathname.startsWith("/invoice");
@@ -49,6 +51,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ? "bg-[var(--ink)] text-[var(--paper)]"
         : "text-[var(--muted)] hover:bg-[var(--wash)] hover:text-[var(--ink)]"
     }`;
+
+  if (isPublicShare) {
+    return (
+      <div className="flex min-h-full min-h-[100dvh] max-w-[100vw] flex-col overflow-x-clip">
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-full min-h-[100dvh] max-w-[100vw] flex-col overflow-x-clip pb-[env(safe-area-inset-bottom)]">
@@ -156,14 +166,15 @@ export function PageHeader({
   );
 }
 
-export function Button({
-  children,
-  variant = "primary",
-  className = "",
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "danger" | "ghost";
-}) {
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & {
+    variant?: "primary" | "secondary" | "danger" | "ghost";
+  }
+>(function Button(
+  { children, variant = "primary", className = "", ...props },
+  ref,
+) {
   const styles = {
     primary:
       "bg-[var(--accent)] text-white hover:brightness-110 shadow-sm",
@@ -174,13 +185,15 @@ export function Button({
   }[variant];
   return (
     <button
+      ref={ref}
       className={`inline-flex min-h-11 items-center justify-center rounded-md px-3.5 py-2.5 text-base font-medium transition disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:py-2 sm:text-sm ${styles} ${className}`}
       {...props}
     >
       {children}
     </button>
   );
-}
+});
+Button.displayName = "Button";
 
 export function Field({
   label,

@@ -377,6 +377,21 @@ export interface AutoBackupRecord {
   payload: unknown;
 }
 
+/**
+ * Owner-side share link. Public payload is a frozen document snapshot
+ * (see `PublicSharePayload` in share-link.ts). Token is the capability.
+ */
+export interface ShareLinkRecord {
+  token: string;
+  invoiceId: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string;
+  fingerprint: string;
+  payload: unknown;
+}
+
 export const EMPTY_PARTY: PartySnapshot = {
   name: "",
   email: "",

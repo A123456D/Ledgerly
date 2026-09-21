@@ -1718,6 +1718,8 @@ export function InvoiceEditor({ id }: { id: string }) {
           open={sendOpen}
           onClose={() => setSendOpen(false)}
           doc={preview}
+          invoiceId={invoice.id}
+          status={invoice.status}
           fromName={business?.name}
           fromEmail={business?.email}
           sarsErrors={sarsSendErrors}

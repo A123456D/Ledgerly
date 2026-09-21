@@ -8,6 +8,7 @@ import {
   type CustomTemplate,
   type Invoice,
   type Payslip,
+  type ShareLinkRecord,
   DEFAULT_ACCENT,
 } from "./types";
 import { normalizeBusinessLogos } from "./logos";
@@ -21,6 +22,7 @@ export class InvoiceDatabase extends Dexie {
   settings!: EntityTable<AppSettings, "id">;
   customTemplates!: EntityTable<CustomTemplate, "id">;
   autoBackups!: EntityTable<AutoBackupRecord, "id">;
+  shareLinks!: EntityTable<ShareLinkRecord, "token">;
 
   constructor() {
     super("invoice-maker");
@@ -66,6 +68,17 @@ export class InvoiceDatabase extends Dexie {
       settings: "id",
       customTemplates: "id, name, createdAt",
       autoBackups: "id, createdAt",
+    });
+    this.version(6).stores({
+      business: "id",
+      clients: "id, name, updatedAt",
+      items: "id, description",
+      invoices: "id, status, number, clientId, updatedAt, createdAt, kind",
+      payslips: "id, status, number, clientId, updatedAt, createdAt",
+      settings: "id",
+      customTemplates: "id, name, createdAt",
+      autoBackups: "id, createdAt",
+      shareLinks: "token, invoiceId, enabled, updatedAt",
     });
   }
 }

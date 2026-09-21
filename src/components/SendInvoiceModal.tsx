@@ -14,11 +14,33 @@ import {
 } from "@/lib/pdf/download";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { formatMoney } from "@/lib/format";
+import { documentNounLower } from "@/lib/document-kind";
+import type { InvoiceStatus, ShareLinkRecord } from "@/lib/types";
+import {
+  COPY,
+  copyText,
+  ensureViewOnlineMessage,
+  isShareStale,
+  publicShareUrl,
+  publishBlockedReason,
+  stripViewOnlineMessage,
+  truncateMiddle,
+  whatsappShareText,
+} from "@/lib/share-link";
+import {
+  createShareLink,
+  disableShareLink,
+  getEnabledShareForInvoice,
+  refreshShareLink,
+  updateShareLink,
+} from "@/lib/share-link-store";
 
 export function SendInvoiceModal({
   open,
   onClose,
   doc,
+  invoiceId,
+  status,
   fromName,
   fromEmail,
   onSent,
@@ -27,6 +49,8 @@ export function SendInvoiceModal({
   open: boolean;
   onClose: () => void;
   doc: InvoiceViewModel;
+  invoiceId: string;
+  status: InvoiceStatus;
   fromName?: string;
   fromEmail?: string;
   onSent?: (info: { to: string }) => void;
@@ -40,24 +64,48 @@ export function SendInvoiceModal({
   const [waPhone, setWaPhone] = useState(doc.client.phone || "");
   const [busy, setBusy] = useState(false);
   const [prepBusy, setPrepBusy] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
+  const [copied, setCopied] = useState("");
   const [readyFile, setReadyFile] = useState<File | null>(null);
   const readyFileRef = useRef<File | null>(null);
+  const copyBtnRef = useRef<HTMLButtonElement>(null);
+  const [share, setShare] = useState<ShareLinkRecord | null>(null);
+  const nounLower = documentNounLower(doc.kind);
+  const sendTitle = `Send ${nounLower}`;
+  const blockedPublish = publishBlockedReason(status, doc.kind);
+  const sarsBlocked = sarsErrors.length > 0;
+  const shareUrl = share?.enabled ? publicShareUrl(share.token) : "";
+  const stale =
+    share?.enabled && shareUrl
+      ? isShareStale(share.fingerprint, doc, status)
+      : false;
 
   useEffect(() => {
     if (!open) return;
     const next = defaultSendCopy(doc, fromName);
+    // Reset fields when the dialog opens for a document (same pattern as before P0-4).
+    /* eslint-disable react-hooks/set-state-in-effect -- modal open is an external event */
     setTo(next.to);
     setSubject(next.subject);
     setMessage(next.message);
     setWaPhone(doc.client.phone || "");
     setError("");
     setOk("");
+    setCopied("");
+    /* eslint-enable react-hooks/set-state-in-effect */
     readyFileRef.current = null;
     setReadyFile(null);
+    setShare(null);
 
     let cancelled = false;
+    void getEnabledShareForInvoice(invoiceId).then((row) => {
+      if (cancelled || !row) return;
+      setShare(row);
+      setMessage(ensureViewOnlineMessage(next.message, publicShareUrl(row.token)));
+    });
+
     setPrepBusy(true);
     void prepareInvoicePdfFile(doc)
       .then((file) => {
@@ -81,9 +129,79 @@ export function SendInvoiceModal({
     return () => {
       cancelled = true;
     };
-  }, [open, doc, fromName]);
+  }, [open, doc, fromName, invoiceId]);
 
   if (!open) return null;
+
+  async function copyUrl(url: string) {
+    await copyText(url);
+    setCopied(COPY.copied);
+  }
+
+  async function onCreate() {
+    if (sarsBlocked) return;
+    setShareBusy(true);
+    setError("");
+    setCopied("");
+    try {
+      const result = await createShareLink(invoiceId, doc, status);
+      setShare(result.record);
+      setMessage((m) => ensureViewOnlineMessage(m, result.url));
+      await copyUrl(result.url);
+      copyBtnRef.current?.focus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create link");
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function onUpdate() {
+    setShareBusy(true);
+    setError("");
+    try {
+      const result = await updateShareLink(invoiceId, doc, status);
+      setShare(result.record);
+      setMessage((m) => ensureViewOnlineMessage(m, result.url));
+      setCopied("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update link");
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function onRefresh() {
+    if (!confirm(COPY.refreshConfirm)) return;
+    setShareBusy(true);
+    setError("");
+    try {
+      const result = await refreshShareLink(invoiceId, doc, status);
+      setShare(result.record);
+      setMessage((m) => ensureViewOnlineMessage(m, result.url));
+      setCopied("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not refresh link");
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function onDisable() {
+    if (!share) return;
+    if (!confirm(COPY.disableConfirm)) return;
+    setShareBusy(true);
+    setError("");
+    try {
+      await disableShareLink(share.token);
+      setShare(null);
+      setCopied("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not disable link");
+    } finally {
+      setShareBusy(false);
+    }
+  }
 
   async function onWhatsApp() {
     const file = readyFileRef.current;
@@ -95,15 +213,13 @@ export function SendInvoiceModal({
     setOk("");
 
     const phone = whatsappPhoneDigits(waPhone);
-    const shareText = [
+    const shareText = whatsappShareText({
       subject,
-      "",
-      message,
-      "",
-      `(Attach the PDF “${file.name}” if it isn’t included.)`,
-    ].join("\n");
+      message: stripViewOnlineMessage(message),
+      url: shareUrl || null,
+      pdfName: file.name,
+    });
 
-    // 1) System share sheet with PDF (mobile Chrome / Safari / installed PWA)
     try {
       const result = await sharePreparedPdfFile(file);
       if (result === "shared") {
@@ -118,7 +234,6 @@ export function SendInvoiceModal({
       }
     }
 
-    // 2) Fallback: download PDF + open WhatsApp with the message
     downloadPdfBlob(file, file.name);
     openWhatsAppWithText(shareText, phone || undefined);
     setOk(
@@ -139,7 +254,7 @@ export function SendInvoiceModal({
         doc,
         to,
         subject,
-        message,
+        message: shareUrl ? ensureViewOnlineMessage(message, shareUrl) : message,
         fromName,
         fromEmail,
       });
@@ -153,13 +268,14 @@ export function SendInvoiceModal({
   }
 
   const waReady = Boolean(readyFile) && !prepBusy;
+  const actionsDisabled = busy || shareBusy || sarsBlocked;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 p-[max(0.75rem,env(safe-area-inset-left))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-start sm:p-8"
       role="dialog"
       aria-modal
-      aria-label="Send invoice"
+      aria-label={sendTitle}
       onClick={onClose}
     >
       <form
@@ -170,7 +286,7 @@ export function SendInvoiceModal({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
-              Send invoice
+              {sendTitle}
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
               {doc.number || "Draft"} ·{" "}
@@ -196,6 +312,100 @@ export function SendInvoiceModal({
         ) : null}
 
         <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--wash)]/50 p-3">
+          <p className="text-sm font-medium text-[var(--ink)]">Shareable link</p>
+          {shareUrl ? (
+            <>
+              <div className="mt-2 flex items-center gap-1">
+                <p
+                  className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-2 font-mono text-xs text-[var(--ink)]"
+                  title={shareUrl}
+                >
+                  {truncateMiddle(shareUrl, 36)}
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="shrink-0 px-2.5"
+                  onClick={() => void copyUrl(shareUrl)}
+                  disabled={shareBusy}
+                >
+                  Copy
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="shrink-0 px-2.5"
+                  onClick={() => window.open(shareUrl, "_blank", "noopener,noreferrer")}
+                >
+                  {COPY.open}
+                </Button>
+              </div>
+              {copied ? (
+                <p className="mt-1 text-sm text-teal-800">{copied}</p>
+              ) : (
+                <p className="mt-1 text-xs text-[var(--muted)]">{COPY.helperLive}</p>
+              )}
+              {stale ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2">
+                  <p className="flex-1 text-xs text-amber-900">{COPY.stale}</p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="shrink-0"
+                    disabled={actionsDisabled}
+                    onClick={() => void onUpdate()}
+                  >
+                    {COPY.update}
+                  </Button>
+                </div>
+              ) : null}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  ref={copyBtnRef}
+                  type="button"
+                  disabled={shareBusy}
+                  onClick={() => void copyUrl(shareUrl)}
+                >
+                  {COPY.copy}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={actionsDisabled}
+                  onClick={() => void onRefresh()}
+                >
+                  {COPY.refresh}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-red-700 hover:bg-red-50 hover:text-red-800"
+                  disabled={shareBusy}
+                  onClick={() => void onDisable()}
+                >
+                  {COPY.disable}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                {blockedPublish || COPY.helperNew(nounLower)}
+              </p>
+              <div className="mt-3">
+                <Button
+                  type="button"
+                  disabled={Boolean(blockedPublish) || actionsDisabled}
+                  onClick={() => void onCreate()}
+                >
+                  {shareBusy ? COPY.creating : COPY.create}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--wash)]/50 p-3">
           <p className="text-sm font-medium text-[var(--ink)]">WhatsApp</p>
           <p className="mt-1 text-xs text-[var(--muted)]">
             On phones, this opens the share sheet with the PDF. On desktop it
@@ -213,7 +423,7 @@ export function SendInvoiceModal({
           <div className="mt-3">
             <Button
               type="button"
-              disabled={!waReady || busy || sarsErrors.length > 0}
+              disabled={!waReady || busy || sarsBlocked}
               onClick={() => void onWhatsApp()}
             >
               {prepBusy
@@ -230,9 +440,18 @@ export function SendInvoiceModal({
             Or email
           </p>
           <p className="text-xs text-[var(--muted)]">
-            Opens your mail app with this message. The PDF downloads separately —
-            attach it before you send.
+            {shareUrl ? COPY.emailWithLink : COPY.emailNoLink}
           </p>
+          {!shareUrl && !blockedPublish ? (
+            <button
+              type="button"
+              className="text-xs font-medium text-[var(--accent)] underline-offset-2 hover:underline"
+              disabled={actionsDisabled}
+              onClick={() => void onCreate()}
+            >
+              {COPY.createFirst}
+            </button>
+          ) : null}
           <Field label="To">
             <input
               className={inputClass}
@@ -266,7 +485,7 @@ export function SendInvoiceModal({
         {ok ? <p className="mt-3 text-sm text-teal-800">{ok}</p> : null}
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy || prepBusy || sarsErrors.length > 0}>
+          <Button type="submit" disabled={busy || prepBusy || sarsBlocked}>
             {busy ? "Preparing…" : "Open email + PDF"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
