@@ -405,7 +405,7 @@ export async function buildInvoicePdfBlobLegacy(
             createElement(
               Text,
               { style: showVat ? styles.colDesc : { width: "46%" } },
-              line.description || "ÔÇö",
+              line.description || "—",
             ),
             createElement(
               Text,

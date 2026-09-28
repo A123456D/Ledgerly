@@ -91,7 +91,7 @@ export function ItemsPage() {
                 min={0}
                 step={0.01}
                 value={form.unitPrice}
-                onChange={(e) => setForm({ ...form, unitPrice: Number(e.target.value) })}
+                onChange={(e) => setForm({ ...form, unitPrice: Math.max(0, Number(e.target.value) || 0) })}
               />
             </Field>
             <Field label="Unit">
@@ -109,7 +109,7 @@ export function ItemsPage() {
                 min={0}
                 step={0.01}
                 value={form.taxRate}
-                onChange={(e) => setForm({ ...form, taxRate: Number(e.target.value) })}
+                onChange={(e) => setForm({ ...form, taxRate: Math.max(0, Number(e.target.value) || 0) })}
               />
             </Field>
           </div>

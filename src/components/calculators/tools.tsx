@@ -503,7 +503,11 @@ export function FxTool() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MoneyField label="Amount" value={amount} onChange={setAmount} />
         <Field label="From">
-          <select className={inputClass} value={from} onChange={(e) => setFrom(e.target.value)}>
+          <select className={inputClass} value={from} onChange={(e) => {
+              setFrom(e.target.value);
+              setRate(0);
+              setStatus("Pair changed — load rates or type one yourself.");
+            }}>
             {FX_CODES.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -512,7 +516,11 @@ export function FxTool() {
           </select>
         </Field>
         <Field label="To">
-          <select className={inputClass} value={to} onChange={(e) => setTo(e.target.value)}>
+          <select className={inputClass} value={to} onChange={(e) => {
+              setTo(e.target.value);
+              setRate(0);
+              setStatus("Pair changed — load rates or type one yourself.");
+            }}>
             {FX_CODES.map((c) => (
               <option key={c} value={c}>
                 {c}

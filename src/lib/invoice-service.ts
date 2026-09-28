@@ -1,7 +1,7 @@
 import { db, getBusiness, getSettings } from "./db";
 import { getCustomTemplate } from "./custom-templates";
 import { todayISO, uid } from "./format";
-import { calculateTotals } from "./invoice-math";
+import { calculateTotals, roundMoney } from "./invoice-math";
 import {
   bumpSequenceForUsedNumber,
   numberIsTaken,
@@ -27,10 +27,6 @@ import { documentKind, documentNounLower, isQuote } from "./document-kind";
 import { isSarsTaxInvoiceEnabled, sarsModeFromDoc } from "./sars-vat-mode";
 import type { InvoiceViewModel } from "@/templates/InvoicePreview";
 import { getBuiltinTemplate, isBuiltinTemplateId } from "./templates/catalog";
-import {
-  buildTemplateDecorations,
-  isBuiltinTemplateIdForDesign,
-} from "./templates/decoration-presets";
 import { resolveLogoDataUrl, normalizeBusinessLogos } from "./logos";
 import { resolveVisibility } from "./invoice-visibility";
 import { defaultBusinessNameFill } from "./decorations/business-name-decoration";
@@ -297,13 +293,6 @@ export async function createDraftInvoice(options?: {
     updatedAt: now,
   };
   invoice.totals = recomputeTotals(invoice);
-  if (
-    !options?.fromInvoiceId &&
-    isBuiltinTemplateIdForDesign(templateId) &&
-    !decorations?.length
-  ) {
-    invoice.decorations = buildTemplateDecorations(templateId, accentColor);
-  }
   const logoDataUrl = resolveLogoDataUrl(
     business,
     invoice.logoId === null
@@ -609,11 +598,15 @@ export async function recordPartialPayment(
   if (isQuote(invoice.kind)) throw new Error("Quotes cannot have partial payments");
   if (amount <= 0) throw new Error("Amount must be greater than 0");
   const total = invoice.totals.total;
-  if (amount >= total) throw new Error("Use Mark paid for a full payment");
+  const already = invoice.amountPaid ?? 0;
+  const remaining = roundMoney(total - already);
+  if (amount >= remaining) {
+    throw new Error("That covers the whole balance — use Mark paid instead");
+  }
   const next: Invoice = {
     ...invoice,
     status: "partial",
-    amountPaid: amount,
+    amountPaid: roundMoney(already + amount),
     paidAt: date,
     updatedAt: new Date().toISOString(),
   };
@@ -828,11 +821,11 @@ export async function displayDocumentLive(
       ? invoice.decorations
       : designDecorations?.length
         ? designDecorations
-        : layoutId
-          ? buildTemplateDecorations(layoutId, accent)
-          : undefined;
+        : undefined;
 
-  if (invoice.status === "draft") {
+  // Identity shapes (logo / business name layers) are opt-in via the design
+  // studio — templates render their own designed headers when none exist.
+  if (invoice.status === "draft" && decorations?.length) {
     decorations = syncIdentityDecorations(decorations, {
       accent,
       logoVisible: vis.logo,

@@ -142,16 +142,6 @@ export async function ensureDefaults(): Promise<{
     await db.business.put(business);
   } else {
     let next = business;
-    if (next.currency === "EUR" && next.defaultTaxRate === 21) {
-      // Migrate previous EU factory defaults → SA (ZAR + 15% VAT)
-      next = {
-        ...next,
-        currency: "ZAR",
-        defaultTaxRate: 15,
-        country: next.country || "South Africa",
-        updatedAt: new Date().toISOString(),
-      };
-    }
     if (!next.quotePrefix) {
       next = {
         ...next,
@@ -219,6 +209,21 @@ export async function ensureDefaults(): Promise<{
         payslipSequenceYear: next.payslipSequenceYear ?? new Date().getFullYear(),
       };
     }
+    if (!next.migratedEuFactoryDefaults) {
+      // One-time: factory defaults were EUR/21% before the SA pivot. The flag
+      // stops it from reverting a deliberate EUR/21% configuration forever.
+      next = { ...next, migratedEuFactoryDefaults: true };
+      if (business.currency === "EUR" && business.defaultTaxRate === 21) {
+        business = {
+          ...business,
+          currency: "ZAR",
+          defaultTaxRate: 15,
+          country: business.country || "South Africa",
+          updatedAt: new Date().toISOString(),
+        };
+        await db.business.put(business);
+      }
+    }
     if (next !== settings) {
       settings = next;
       await db.settings.put(settings);
@@ -241,7 +246,21 @@ export async function ensureDefaults(): Promise<{
 
 export async function getBusiness(): Promise<Business> {
   const { business } = await ensureDefaults();
-  return normalizeBusinessLogos(business);
+  const normalized = normalizeBusinessLogos(business);
+  if (
+    normalized.logos?.length !== (business.logos?.length ?? 0) ||
+    normalized.defaultLogoId !== business.defaultLogoId ||
+    normalized.logoDataUrl !== business.logoDataUrl
+  ) {
+    // Persist the migration (e.g. legacy logoDataUrl → logos[]) so stored
+    // logoId references stay resolvable across sessions.
+    try {
+      await db.business.put({ ...normalized, updatedAt: business.updatedAt });
+    } catch {
+      /* read paths still use the normalized value */
+    }
+  }
+  return normalized;
 }
 
 export async function saveBusiness(

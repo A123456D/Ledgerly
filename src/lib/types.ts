@@ -319,6 +319,9 @@ export interface Invoice {
 }
 
 export type PayslipStatus = "draft" | "issued" | "void";
+
+/** Payslips have their own (invoice-independent) designs. */
+export type PayslipTemplateId = "modern" | "classic" | "minimal";
 export interface PayLine {
   id: string;
   label: string;
@@ -345,6 +348,8 @@ export interface Payslip {
   status: PayslipStatus;
   number: string | null;
   clientId: string | null;
+  /** Which payslip design prints; missing on old records = "modern". */
+  templateId?: PayslipTemplateId;
   employee: PayslipEmployee;
   periodStart: string;
   periodEnd: string;
@@ -415,6 +420,8 @@ export interface AppSettings {
   lastAutoBackupAt?: string;
   /** One-time: factory font was editorial; do not re-apply after the user picks Editorial. */
   migratedDefaultFontPair?: boolean;
+  /** One-time: EUR/21% factory defaults were migrated to ZAR/15%. */
+  migratedEuFactoryDefaults?: boolean;
 }
 
 /** Local auto-backup snapshot stored in IndexedDB. */

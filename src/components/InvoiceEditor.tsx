@@ -141,6 +141,11 @@ export function InvoiceEditor({ id }: { id: string }) {
     if (dirtyRef.current) {
       return;
     }
+    // No identity shapes on the canvas — the template renders its own header.
+    if (!stored.decorations?.length) {
+      setInvoice(stored);
+      return;
+    }
     const vis = resolveVisibility(stored.visibility);
     const baseId = isBuiltinTemplateId(stored.templateId)
       ? stored.templateId
@@ -1817,22 +1822,26 @@ function RecordPartialSheet({
   onSave: (amount: number, date: string) => void;
   onCancel: () => void;
 }) {
-  const [amountRaw, setAmountRaw] = useState(
-    existing != null ? existing.toFixed(2) : "",
-  );
+  const [amountRaw, setAmountRaw] = useState("");
   const [date, setDate] = useState(existingDate ?? todayISO());
   const [localError, setLocalError] = useState("");
 
   const amount = parseFloat(amountRaw) || 0;
-  const remaining = Math.max(0, total - amount);
+  const already = existing ?? 0;
+  const outstanding = Math.max(0, total - already);
+  const balanceLeft = Math.max(0, total - already - amount);
 
   function handleSave() {
     if (amount <= 0) {
       setLocalError("Amount must be greater than 0");
       return;
     }
-    if (amount >= total) {
-      setLocalError("Use Mark paid for a full payment");
+    if (amount >= outstanding) {
+      setLocalError(
+        outstanding > 0 && amount < total
+          ? `Only ${formatMoney(outstanding, currency)} is left — use Mark paid for the full balance`
+          : "Use Mark paid for a full payment",
+      );
       return;
     }
     setLocalError("");
@@ -1848,7 +1857,7 @@ function RecordPartialSheet({
     >
       <div className="w-full max-w-md rounded-t-2xl bg-[var(--panel)] p-5 shadow-xl sm:rounded-2xl">
         <h2 className="mb-4 text-base font-semibold text-[var(--ink)]">
-          Record partial payment
+          {already > 0 ? "Record another payment" : "Record partial payment"}
         </h2>
         <div className="space-y-4">
           <Field label={`Amount (${currency})`}>
@@ -1863,8 +1872,12 @@ function RecordPartialSheet({
               onChange={(e) => setAmountRaw(e.target.value)}
             />
             <p className="mt-1 text-xs text-[var(--muted)]">
-              Balance left:{" "}
-              {formatMoney(remaining, currency)}
+              {already > 0
+                ? `Recorded so far: ${formatMoney(already, currency)}${existingDate ? ` (${formatDate(existingDate)})` : ""}`
+                : "Payments add up — record each one as it lands."}
+            </p>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Balance left after this: {formatMoney(balanceLeft, currency)}
             </p>
           </Field>
           <Field label="Date">

@@ -29,6 +29,7 @@ import {
   isLogoDecoration,
 } from "@/lib/decorations/logo-decoration";
 import { isBusinessNameDecoration } from "@/lib/decorations/business-name-decoration";
+import { inkOn, mutedInkOn } from "@/lib/color";
 import {
   amountDueLabel,
   isQuote,
@@ -325,6 +326,8 @@ function Logo({
   rounded = "rounded-xl",
   /** Wide logos keep height from the size control and grow horizontally. */
   wide = false,
+  /** White chip behind the artwork — keeps multicolor logos readable on accent bands. */
+  chip = false,
 }: {
   src?: string;
   name: string;
@@ -333,6 +336,7 @@ function Logo({
   invert?: boolean;
   rounded?: string;
   wide?: boolean;
+  chip?: boolean;
 }) {
   const logoVisible = useContext(LogoVisibleCtx);
   const showInline = useContext(InlineLogoCtx);
@@ -352,6 +356,22 @@ function Logo({
       };
 
   if (src) {
+    if (chip) {
+      return (
+        <span
+          className={`inline-flex shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm ${className}`}
+          style={{ height: size + 12, width: wide ? "auto" : size + 12 }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt=""
+            className="max-h-full max-w-full object-contain"
+            style={wide ? { height: size, width: "auto" } : { width: size, height: size }}
+          />
+        </span>
+      );
+    }
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -416,6 +436,11 @@ function Label({
   );
 }
 
+/** Party heading that reads right for the document kind. */
+function partyHeading(doc: InvoiceViewModel, invoiceText: string, quoteText: string) {
+  return isQuote(doc.kind) ? quoteText : invoiceText;
+}
+
 function lineAmt(doc: InvoiceViewModel, line: LineItem) {
   const base =
     (line.quantity || 0) *
@@ -433,19 +458,31 @@ function FancyTable({
 }: {
   doc: InvoiceViewModel;
   accent: string;
-  mode?: "soft" | "solid" | "dark" | "gold" | "lined";
+  mode?: "soft" | "solid" | "dark" | "gold" | "lined" | "zebra";
 }) {
   const tableAccent = useSectionAccent("lineItems", accent);
   const head =
     mode === "solid"
-      ? { background: tableAccent, color: "#fff" }
+      ? { background: tableAccent, color: inkOn(tableAccent) }
       : mode === "dark"
         ? { background: "rgba(255,255,255,0.08)", color: "#e2e8f0" }
         : mode === "gold"
           ? { background: "transparent", color: tableAccent, borderBottom: `1px solid ${tableAccent}` }
           : mode === "lined"
             ? { background: "transparent", color: "#000", borderBottom: "2px solid #000" }
-            : { background: `${tableAccent}14`, color: "#334155" };
+            : mode === "zebra"
+              ? { background: "transparent", color: "#334155", borderBottom: "1px solid rgba(0,0,0,0.14)" }
+              : { background: `${tableAccent}14`, color: "#334155" };
+
+  // One coherent treatment per mode — no alternating border/tint mixes.
+  const rowClass = (i: number) => {
+    if (mode === "dark") return "border-b border-white/10";
+    if (mode === "zebra") return i % 2 === 1 ? "bg-black/[0.035]" : "";
+    if (mode === "gold") return "border-b border-black/[0.12]";
+    if (mode === "lined") return "border-b border-black/[0.12]";
+    if (mode === "solid") return "border-b border-black/[0.08]";
+    return "border-b border-black/[0.08]";
+  };
 
   const showVat = show(doc, "vat");
   const headers = showVat
@@ -457,10 +494,10 @@ function FancyTable({
     <table className="mt-6 w-full table-fixed border-collapse text-[13px]">
       <colgroup>
         <col className="w-auto" />
-        <col className="w-[12%]" />
-        <col className="w-[16%]" />
-        {showVat ? <col className="w-[10%]" /> : null}
+        <col className="w-[9%]" />
         <col className="w-[18%]" />
+        {showVat ? <col className="w-[9%]" /> : null}
+        <col className="w-[20%]" />
       </colgroup>
       <thead>
         <tr style={head}>
@@ -476,31 +513,24 @@ function FancyTable({
       </thead>
       <tbody>
         {doc.lineItems.map((line, i) => (
-          <tr key={line.id} data-invoice-avoid-break className={
-              mode === "dark"
-                ? "border-b border-white/10"
-                : i % 2 === 1
-                  ? "bg-black/[0.02]"
-                  : "border-b border-black/[0.06]"
-            }
-          >
+          <tr key={line.id} data-invoice-avoid-break className={rowClass(i)}>
             <td className="px-2 py-3.5 align-top whitespace-normal break-words leading-snug [overflow-wrap:anywhere]">
               {line.description || "—"}
               {line.discountPercent ? (
                 <span className="ml-2 text-[11px] opacity-45">−{line.discountPercent}%</span>
               ) : null}
             </td>
-            <td className="px-1.5 py-3.5 text-right align-top tabular-nums whitespace-normal break-words">
+            <td className="whitespace-nowrap px-1 py-3.5 text-right align-top tabular-nums">
               {line.quantity}
               {line.unit ? ` ${line.unit}` : ""}
             </td>
-            <td className="px-1.5 py-3.5 text-right tabular-nums">
+            <td className="whitespace-nowrap px-1 py-3.5 text-right align-top text-[12px] tabular-nums">
               {formatMoney(line.unitPrice, doc.currency)}
             </td>
             {showVat ? (
-              <td className="px-1.5 py-3.5 text-right tabular-nums">{line.taxRate || 0}%</td>
+              <td className="whitespace-nowrap px-1 py-3.5 text-right align-top text-[12px] tabular-nums">{line.taxRate || 0}%</td>
             ) : null}
-            <td className="px-2 py-3.5 text-right font-semibold tabular-nums">
+            <td className="whitespace-nowrap px-2 py-3.5 text-right align-top font-semibold tabular-nums">
               {formatMoney(lineAmt(doc, line), doc.currency)}
             </td>
           </tr>
@@ -515,10 +545,13 @@ function DueCard({
   doc,
   accent,
   invert,
+  shape = "pill",
 }: {
   doc: InvoiceViewModel;
   accent: string;
   invert?: boolean;
+  /** "pill" = rounded brand block; "box" = squared, serif-document friendly. */
+  shape?: "pill" | "box";
 }) {
   const totalsAccent = useSectionAccent("totals", accent);
 
@@ -535,6 +568,12 @@ function DueCard({
         : [];
 
   const totalLabel = forceSarsTotals ? "Total incl VAT" : amountDueLabel(doc.kind);
+  const blockInk = invert ? "#0f172a" : inkOn(totalsAccent);
+  const blockMuted = invert ? "opacity-50" : undefined;
+  const blockStyle = invert
+    ? undefined
+    : { background: totalsAccent, color: blockInk };
+  const radius = shape === "box" ? "rounded-lg border border-black/15" : "rounded-2xl";
 
   return (
     <EditableSection section="totals" accent={accent} className="ml-auto mt-6 w-[15.5rem] space-y-2 text-[13px]">
@@ -556,11 +595,13 @@ function DueCard({
           ))
         : null}
       <div
-        className={`mt-2 rounded-2xl px-5 py-4 ${invert ? "bg-white text-slate-900" : "text-white"}`}
-        style={invert ? undefined : { background: totalsAccent }}
+        data-invoice-avoid-break
+        className={`mt-2 px-5 py-4 ${radius} ${invert ? "bg-white text-slate-900" : ""}`}
+        style={blockStyle}
       >
         <p
-          className={`text-[10px] font-bold uppercase tracking-[0.2em] ${invert ? "opacity-50" : "text-white/80"}`}
+          className={`text-[10px] font-bold uppercase tracking-[0.2em] ${blockMuted ?? (blockInk === "#ffffff" ? "text-white/80" : "")}`}
+          style={!invert && blockInk !== "#ffffff" ? { color: mutedInkOn(totalsAccent) } : undefined}
         >
           {totalLabel}
         </p>
@@ -611,19 +652,59 @@ function InvoiceClosing({
   accent,
   light,
   invert,
+  totalsShape = "pill",
 }: {
   doc: InvoiceViewModel;
   accent: string;
   light?: boolean;
   invert?: boolean;
+  totalsShape?: "pill" | "box";
 }) {
   return (
     <>
       <div data-invoice-avoid-break>
-        <DueCard doc={doc} accent={accent} invert={invert} />
+        <DueCard doc={doc} accent={accent} invert={invert} shape={totalsShape} />
       </div>
       <Notes doc={doc} light={light} accent={accent} />
+      <QuoteAcceptance doc={doc} accent={accent} />
     </>
+  );
+}
+
+/** Quotes read like proposals: a signature strip makes them accept-on-paper. */
+function QuoteAcceptance({
+  doc,
+  accent,
+}: {
+  doc: InvoiceViewModel;
+  accent: string;
+}) {
+  if (!isQuote(doc.kind)) return null;
+  return (
+    <div
+      data-invoice-avoid-break
+      className="mt-8 border-t border-black/15 pt-6"
+    >
+      <Label className="opacity-45">Acceptance</Label>
+      <p className="mt-2 max-w-xl text-[12px] leading-relaxed opacity-70">
+        Signing below accepts this quote as scoped. Pricing is held for the
+        validity period shown above; work is scheduled once the signed copy is
+        returned.
+      </p>
+      <div className="mt-6 grid grid-cols-2 gap-10 text-[12px]">
+        <div>
+          <div className="h-8 border-b border-black/40" />
+          <p className="mt-1.5 opacity-55">Accepted for the client — signature</p>
+        </div>
+        <div>
+          <div className="h-8 border-b border-black/40" />
+          <p className="mt-1.5 opacity-55">Date</p>
+        </div>
+      </div>
+      <p className="mt-4 text-[10px] uppercase tracking-[0.2em]" style={{ color: accent }}>
+        {doc.number}
+      </p>
+    </div>
   );
 }
 
@@ -712,7 +793,7 @@ function Classic({ doc, accent, logo }: Ctx) {
         </Gate>
         <Gate doc={doc} field="billTo" accent={accent}>
           <div className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
-            <Label className="opacity-45">Bill to</Label>
+            <Label className="opacity-45">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
             <Party p={doc.client} className="mt-2" />
           </div>
         </Gate>
@@ -755,7 +836,7 @@ function Minimal({ doc, accent, logo }: Ctx) {
         </Gate>
         <Gate doc={doc} field="billTo" accent={accent}>
           <div>
-            <Label className="text-neutral-400">Bill to</Label>
+            <Label className="text-neutral-400">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
             <Party p={doc.client} className="mt-4" />
           </div>
         </Gate>
@@ -819,7 +900,7 @@ function Bold({ doc, accent, logo }: Ctx) {
         >
           <div className="absolute inset-0" style={{ background: accent }} aria-hidden />
           <div className="relative">
-            <Logo src={logo} name={doc.business.name} accent="#fff" invert={!!logo} rounded="rounded-2xl" />
+            <Logo src={logo} name={doc.business.name} accent="#fff" chip rounded="rounded-2xl" />
             <HeaderBusinessName
               doc={doc}
               className="mt-8 font-[family-name:var(--font-display)] text-3xl font-bold leading-tight"
@@ -841,14 +922,12 @@ function Bold({ doc, accent, logo }: Ctx) {
         <div className="invoice-pad flex flex-col">
           <Gate doc={doc} field="billTo" accent={accent}>
             <div>
-              <Label className="opacity-40">Bill to</Label>
+              <Label className="opacity-40">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
               <Party p={doc.client} className="mt-2 text-base" />
             </div>
           </Gate>
           <FancyTable doc={doc} accent={accent} mode="soft" />
-          <div className="mt-auto">
-            <InvoiceClosing doc={doc} accent={accent} />
-          </div>
+          <InvoiceClosing doc={doc} accent={accent} />
         </div>
       </div>
     </Sheet>
@@ -888,7 +967,7 @@ function Atelier({ doc, accent, logo }: Ctx) {
         </EditableSection>
       </div>
       <FancyTable doc={doc} accent={accent} mode="soft" />
-      <InvoiceClosing doc={doc} accent={accent} />
+      <InvoiceClosing doc={doc} accent={accent} totalsShape="box" />
     </Sheet>
   );
 }
@@ -906,7 +985,7 @@ function Nordic({ doc, accent, logo }: Ctx) {
         <div className="absolute inset-0" style={{ background: accent }} aria-hidden />
         <div className="relative flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Logo src={logo} name={doc.business.name} accent="#fff" invert={!!logo} />
+            <Logo src={logo} name={doc.business.name} accent="#fff" chip />
             <HeaderBusinessName
               doc={doc}
               className="text-2xl font-bold tracking-tight"
@@ -935,7 +1014,7 @@ function Nordic({ doc, accent, logo }: Ctx) {
       <div className="invoice-pad">
         <div className="grid grid-cols-2 gap-8">
           <EditableSection section="billTo" accent={accent}>
-            <Label className="text-slate-400">Bill to</Label>
+            <Label className="text-slate-400">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
             <Party p={doc.client} className="mt-2" />
           </EditableSection>
           <EditableSection section="from" accent={accent}>
@@ -943,7 +1022,7 @@ function Nordic({ doc, accent, logo }: Ctx) {
             <Party p={doc.business} phone={doc.business.phone} className="mt-2" />
           </EditableSection>
         </div>
-        <FancyTable doc={doc} accent={accent} mode="soft" />
+        <FancyTable doc={doc} accent={accent} mode="zebra" />
         <InvoiceClosing doc={doc} accent={accent} />
       </div>
     </Sheet>
@@ -988,7 +1067,7 @@ function Midnight({ doc, accent, logo }: Ctx) {
           tint={false}
           className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
         >
-          <Label className="text-white/40">Bill to</Label>
+          <Label className="text-white/40">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
           <Party p={doc.client} className="mt-2" light />
         </EditableSection>
         <EditableSection
@@ -1043,7 +1122,7 @@ function Coral({ doc, accent, logo }: Ctx) {
         </EditableSection>
         <div className="grid grid-cols-3 gap-4 px-7 py-6 text-sm font-[family-name:var(--font-body)]">
           <EditableSection section="billTo" accent={accent}>
-            <Label className="opacity-40">Bill to</Label>
+            <Label className="opacity-40">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
             <Party p={doc.client} className="mt-2" />
           </EditableSection>
           <EditableSection section="from" accent={accent}>
@@ -1121,7 +1200,7 @@ function Slate({ doc, accent, logo }: Ctx) {
               <DateMeta doc={doc} accent={accent} stacked className="mt-2" issuePrefix="Issue " />
             </div>
           </div>
-          <FancyTable doc={doc} accent={accent} mode="soft" />
+          <FancyTable doc={doc} accent={accent} mode="zebra" />
           <InvoiceClosing doc={doc} accent={accent} />
         </div>
       </div>
@@ -1149,6 +1228,21 @@ function Luxe({ doc, accent, logo }: Ctx) {
           <EditableSection section="reference" accent={accent} tint={false}>
             <p className="mt-3 text-sm tabular-nums opacity-70">{doc.number}</p>
           </EditableSection>
+          {show(doc, "from") ? (
+            <p className="mx-auto mt-4 max-w-md text-center font-[family-name:var(--font-body)] text-[11px] leading-relaxed opacity-55">
+              {[
+                doc.business.address,
+                [doc.business.postalCode, doc.business.city].filter(Boolean).join(" "),
+                doc.business.country,
+                companyNumberLine(doc.business.companyNumber),
+                doc.business.taxId
+                  ? `${isQuote(doc.kind) ? "Tax ID" : "VAT No."} ${doc.business.taxId}`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join(" \u00b7 ")}
+            </p>
+          ) : null}
         </EditableSection>
         <div className="mt-10 grid grid-cols-2 gap-10 font-[family-name:var(--font-body)] text-sm">
           <EditableSection section="billTo" accent={accent} tint={false}>
@@ -1166,7 +1260,7 @@ function Luxe({ doc, accent, logo }: Ctx) {
         </div>
         <div className="font-[family-name:var(--font-body)]">
           <FancyTable doc={doc} accent={accent} mode="gold" />
-          <InvoiceClosing doc={doc} accent={accent} light />
+          <InvoiceClosing doc={doc} accent={accent} light totalsShape="box" />
         </div>
       </div>
     </Sheet>
@@ -1206,7 +1300,7 @@ function Meadow({ doc, accent, logo }: Ctx) {
           accent={accent}
           className="rounded-[28px] bg-white/90 p-5 shadow-sm ring-1 ring-black/5"
         >
-          <Label className="opacity-40">Bill to</Label>
+          <Label className="opacity-40">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
           <Party p={doc.client} className="mt-2" />
         </EditableSection>
         <EditableSection
@@ -1259,7 +1353,7 @@ function Ink({ doc, accent, logo }: Ctx) {
         </EditableSection>
         <div className="mt-10 grid grid-cols-2 gap-10 border-y-[3px] border-black py-6 font-[family-name:var(--font-body)] text-sm">
           <EditableSection section="billTo" accent={accent}>
-            <Label>Bill to</Label>
+            <Label>{partyHeading(doc, "Bill to", "Prepared for")}</Label>
             <Party p={doc.client} className="mt-3" />
           </EditableSection>
           <EditableSection section="from" accent={accent}>
@@ -1289,13 +1383,13 @@ function Studio({ doc, accent, logo }: Ctx) {
         <div
           className="absolute inset-0"
           style={{
-            background: `linear-gradient(135deg, ${accent} 0%, ${accent} 48%, #fb7185 100%)`,
+            background: `linear-gradient(135deg, ${accent} 0%, ${accent} 48%, color-mix(in srgb, ${accent} 55%, #fb7185) 100%)`,
           }}
           aria-hidden
         />
         <div className="relative flex items-start justify-between gap-4">
           <div>
-            <Logo src={logo} name={doc.business.name} accent="#fff" invert={!!logo} wide />
+            <Logo src={logo} name={doc.business.name} accent="#fff" chip wide />
             <HeaderBusinessName
               doc={doc}
               className="mt-6 font-[family-name:var(--font-display)] text-4xl font-bold leading-none tracking-tight"
@@ -1320,7 +1414,7 @@ function Studio({ doc, accent, logo }: Ctx) {
             accent={accent}
             className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
           >
-            <Label className="opacity-40">Bill to</Label>
+            <Label className="opacity-40">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
             <Party p={doc.client} className="mt-2" />
           </EditableSection>
           <EditableSection
@@ -1359,9 +1453,7 @@ function Harbor({ doc, accent, logo }: Ctx) {
         />
         <div className="relative flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-white/10 p-2">
-              <Logo src={logo} name={doc.business.name} accent={brass} invert={!!logo} />
-            </div>
+            <Logo src={logo} name={doc.business.name} accent={brass} chip />
             <div>
               <HeaderBusinessName
                 doc={doc}
@@ -1382,7 +1474,7 @@ function Harbor({ doc, accent, logo }: Ctx) {
       <div className="invoice-pad">
         <div className="grid grid-cols-3 gap-6">
           <EditableSection section="billTo" accent={accent}>
-            <Label className="text-slate-400">Bill to</Label>
+            <Label className="text-slate-400">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
             <Party p={doc.client} className="mt-2" />
           </EditableSection>
           <EditableSection section="from" accent={accent}>
@@ -1394,7 +1486,7 @@ function Harbor({ doc, accent, logo }: Ctx) {
             <DateMeta doc={doc} accent={accent} stacked className="mt-2" issueClassName="font-medium" dueClassName="opacity-55" />
           </div>
         </div>
-        <FancyTable doc={doc} accent={accent} mode="soft" />
+        <FancyTable doc={doc} accent={accent} mode="zebra" />
         <InvoiceClosing doc={doc} accent={accent} />
       </div>
     </Sheet>
@@ -1454,7 +1546,7 @@ function Parchment({ doc, accent, logo }: Ctx) {
           </EditableSection>
           <div className="font-[family-name:var(--font-body)]">
             <FancyTable doc={doc} accent={accent} mode="soft" />
-            <InvoiceClosing doc={doc} accent={accent} />
+            <InvoiceClosing doc={doc} accent={accent} totalsShape="box" />
           </div>
         </div>
       </div>
@@ -1514,7 +1606,7 @@ function CanvaCopy({ doc, accent, logo }: Ctx & { custom?: CustomTemplate | null
           </Gate>
           <Gate doc={doc} field="billTo" accent={useAccent}>
             <div>
-              <Label className="text-neutral-500">Bill to</Label>
+              <Label className="text-neutral-500">{partyHeading(doc, 'Bill to', 'Prepared for')}</Label>
               <Party p={doc.client} className="mt-1" />
             </div>
           </Gate>

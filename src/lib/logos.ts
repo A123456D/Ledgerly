@@ -6,7 +6,9 @@ export function normalizeBusinessLogos(business: Business): Business {
   const logos = [...(business.logos ?? [])];
   if (logos.length === 0 && business.logoDataUrl) {
     logos.push({
-      id: uid("logo"),
+      // Deterministic id: invoices store logoId, and a random id minted per
+      // read would orphan every stored reference.
+      id: "logo-legacy",
       name: "Logo 1",
       dataUrl: business.logoDataUrl,
       createdAt: business.updatedAt || business.createdAt || new Date().toISOString(),

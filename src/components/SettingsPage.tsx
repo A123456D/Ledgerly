@@ -1,7 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useState } from "react";
+import {useEffect, useState, useRef } from "react";
 import {
   downloadJson,
   exportBackup,
@@ -35,12 +35,20 @@ export function SettingsPage() {
   const [backupMessage, setBackupMessage] = useState("");
   const [busyBackup, setBusyBackup] = useState(false);
 
+  // Seed the form once — background settings writes (auto-backup timestamps)
+  // must never clobber in-progress edits.
+  const formSeeded = useRef(false);
   useEffect(() => {
-    if (businessLive) setForm(businessLive);
+    if (businessLive && !formSeeded.current) {
+      formSeeded.current = true;
+      setForm(businessLive);
+    }
   }, [businessLive]);
 
+  const settingsSeeded = useRef(false);
   useEffect(() => {
-    if (settingsLive) {
+    if (settingsLive && !settingsSeeded.current) {
+      settingsSeeded.current = true;
       setTemplate(settingsLive.defaultTemplate);
       setAutoBackupEnabled(settingsLive.autoBackupEnabled !== false);
     }
@@ -228,7 +236,7 @@ export function SettingsPage() {
               label="Default VAT rate %"
               hint="Standard SA rate is 15%. Line rates can still differ."
             >
-              <input className={inputClass} type="number" min={0} step={0.01} value={form.defaultTaxRate} onChange={(e) => patch("defaultTaxRate", Number(e.target.value))} />
+              <input className={inputClass} type="number" min={0} step={0.01} value={form.defaultTaxRate} onChange={(e) => patch("defaultTaxRate", Math.max(0, Number(e.target.value) || 0))} />
             </Field>
             <Field label="VAT mode" hint="This is the default for new invoices. Each invoice can override.">
               <select className={inputClass} value={form.taxMode} onChange={(e) => patch("taxMode", e.target.value as TaxMode)}>
@@ -237,7 +245,7 @@ export function SettingsPage() {
               </select>
             </Field>
             <Field label="Net days" hint="Optional helper — use it on an invoice to fill a due date. New invoices do not get a due date automatically.">
-              <input className={inputClass} type="number" min={0} value={form.netDays} onChange={(e) => patch("netDays", Number(e.target.value))} />
+              <input className={inputClass} type="number" min={0} value={form.netDays} onChange={(e) => patch("netDays", Math.max(0, Number(e.target.value) || 0))} />
             </Field>
             <Field label="Invoice prefix" hint="Numbers format as PREFIX-YEAR-0001">
               <input className={inputClass} value={form.invoicePrefix} onChange={(e) => patch("invoicePrefix", e.target.value)} />

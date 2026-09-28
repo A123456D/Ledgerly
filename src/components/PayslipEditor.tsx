@@ -450,12 +450,39 @@ export function PayslipEditor({ id }: { id: string }) {
             </Field>
 
             {business ? (
-              <BrandLookControls
-                accentColor={slip.accentColor}
-                fontPair={slip.fontPair}
-                onAccentChange={(accentColor) => patch({ accentColor })}
-                onFontChange={(fontPair) => patch({ fontPair })}
-              />
+              <>
+                <Field label="Payslip design">
+                  <div className="flex gap-1.5">
+                    {(
+                      [
+                        { id: "modern", label: "Modern" },
+                        { id: "classic", label: "Classic stub" },
+                        { id: "minimal", label: "Minimal" },
+                      ] as const
+                    ).map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={locked}
+                        onClick={() => markDraft({ ...slip, templateId: t.id })}
+                        className={`flex-1 rounded-md border px-2 py-2 text-xs font-medium transition ${
+                          (slip.templateId ?? "modern") === t.id
+                            ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                            : "border-[var(--line)] text-[var(--muted)] hover:bg-[var(--wash)]"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+                <BrandLookControls
+                  accentColor={slip.accentColor}
+                  fontPair={slip.fontPair}
+                  onAccentChange={(accentColor) => patch({ accentColor })}
+                  onFontChange={(fontPair) => patch({ fontPair })}
+                />
+              </>
             ) : null}
           </fieldset>
         </div>

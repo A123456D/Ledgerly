@@ -1,6 +1,6 @@
 import { db, getBusiness, getSettings, saveSettings } from "./db";
 import { todayISO, uid } from "./format";
-import { allocateNumber, previewNextNumber } from "./numbering";
+import { allocateUnusedNumber, previewNextNumber } from "./numbering";
 import {
   calculatePayslipTotals,
   clientToEmployee,
@@ -68,6 +68,7 @@ export async function createDraftPayslip(options?: {
     status: "draft",
     number: null,
     clientId,
+    templateId: "modern",
     employee,
     periodStart,
     periodEnd,
@@ -90,6 +91,9 @@ export async function createDraftPayslip(options?: {
 export async function savePayslip(slip: Payslip): Promise<Payslip> {
   if (slip.status !== "draft") {
     throw new Error("Only drafts can be edited");
+  }
+  if (slip.periodStart && slip.periodEnd && slip.periodEnd < slip.periodStart) {
+    throw new Error("Pay period end is before its start");
   }
   const next = recomputePayslip({
     ...slip,
@@ -122,16 +126,25 @@ export async function issuePayslip(id: string): Promise<Payslip> {
   if (!slip.employee.name.trim()) {
     throw new Error("Add an employee name before issuing");
   }
+  if (slip.periodStart && slip.periodEnd && slip.periodEnd < slip.periodStart) {
+    throw new Error("Pay period end is before its start");
+  }
   const year = new Date().getFullYear();
   const settings = await getSettings();
   const business = await getBusiness();
-  const { number, nextState } = allocateNumber(
+  // Skip numbers already printed (e.g. after restoring an older backup that
+  // rolled the sequence back) — same protection invoices have.
+  const taken = (await db.payslips.toArray())
+    .map((s) => s.number)
+    .filter((n): n is string => !!n);
+  const { number, nextState } = allocateUnusedNumber(
     {
       nextSequence: settings.nextPayslipSequence ?? 1,
       sequenceYear: settings.payslipSequenceYear ?? year,
     },
     business.payslipPrefix || "PAY-",
     year,
+    taken,
   );
   const next = recomputePayslip({
     ...slip,
