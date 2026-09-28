@@ -21,6 +21,7 @@ import { InvoicePreview, type InvoiceViewModel } from "@/templates/InvoicePrevie
 import { shareDesignTemplate } from "@/lib/templates/share-template";
 import { fillLogoImages } from "@/lib/decorations/logo-decoration";
 import { DEFAULT_FONT_PAIR } from "@/lib/fonts";
+import { sampleInvoiceView } from "@/templates/sample-doc";
 
 const SAMPLE_LOGO_DATA_URL =
   "data:image/svg+xml," +
@@ -84,26 +85,7 @@ function sampleParties(): Pick<InvoiceViewModel, "business" | "client"> {
 }
 
 export function sampleDoc(meta: TemplateMeta): InvoiceViewModel {
-  const design = getTemplateDesignPackage(meta.id);
-  const parties = sampleParties();
-  return {
-    number: "INV-2026-0042",
-    ...parties,
-    currency: "ZAR",
-    taxMode: "exclusive",
-    templateId: meta.id,
-    accentColor: design.accentColor,
-    decorations: fillLogoImages(design.decorations, SAMPLE_LOGO_DATA_URL),
-    logoDataUrl: SAMPLE_LOGO_DATA_URL,
-    fontPair: DEFAULT_FONT_PAIR,
-    issueDate: "2026-08-01",
-    dueDate: "2026-08-15",
-    notes: "Thank you for your business.",
-    paymentInstructions: "Pay within 14 days via EFT.",
-    lineItems: SAMPLE_LINE_ITEMS,
-    totals: SAMPLE_TOTALS,
-    status: "issued",
-  };
+  return sampleInvoiceView(meta.id, meta.defaultAccent);
 }
 
 export function sampleDocFromDesign(template: CustomTemplate): InvoiceViewModel | null {
