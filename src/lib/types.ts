@@ -319,7 +319,6 @@ export interface Invoice {
 }
 
 export type PayslipStatus = "draft" | "issued" | "void";
-
 export interface PayLine {
   id: string;
   label: string;
@@ -358,6 +357,44 @@ export interface Payslip {
   deductions: PayLine[];
   notes: string;
   totals: PayslipTotals;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ExpenseCategory =
+  | "tools"
+  | "travel"
+  | "home-office"
+  | "data"
+  | "professional"
+  | "marketing"
+  | "insurance"
+  | "other";
+
+export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  tools: "Tools & software",
+  travel: "Travel & fuel",
+  "home-office": "Home office",
+  data: "Data & airtime",
+  professional: "Professional fees",
+  marketing: "Marketing",
+  insurance: "Insurance",
+  other: "Other",
+};
+
+/** A business expense for tax season. Amounts are what you actually paid. */
+export interface Expense {
+  id: string;
+  /** ISO date-only (YYYY-MM-DD), local calendar day */
+  date: string;
+  vendor: string;
+  description: string;
+  category: ExpenseCategory;
+  /** Total paid (VAT-inclusive when the vendor charged VAT) */
+  total: number;
+  /** Input VAT portion of total — only claimable when VAT-registered */
+  vatPortion: number;
+  currency: string;
   createdAt: string;
   updatedAt: string;
 }

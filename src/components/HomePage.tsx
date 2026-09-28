@@ -18,6 +18,7 @@ import {
 } from "@/lib/document-kind";
 import { isSarsTaxInvoiceEnabled } from "@/lib/sars-vat-mode";
 import { DocumentListItem } from "@/components/DocumentListItem";
+import { MoneyDashboard } from "@/components/MoneyDashboard";
 
 type InvoiceFilter = "all" | "draft" | "sent" | "partial" | "paid" | "overdue";
 
@@ -273,6 +274,10 @@ export function HomePage({ kind = "invoice" }: { kind?: DocKind }) {
           </>
         }
       />
+
+      {isInvoice && documents ? (
+        <MoneyDashboard documents={documents} business={business} />
+      ) : null}
 
       {needsSetup ? (
         <div className="mb-6 rounded-xl border border-teal-200 bg-teal-50/80 px-4 py-3 text-sm text-teal-950">

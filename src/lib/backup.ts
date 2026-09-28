@@ -5,6 +5,7 @@ import type {
   CatalogItem,
   Client,
   CustomTemplate,
+  Expense,
   Invoice,
   Payslip,
 } from "./types";
@@ -19,10 +20,11 @@ export interface BackupPayload {
   invoices: Invoice[];
   customTemplates?: CustomTemplate[];
   payslips?: Payslip[];
+  expenses?: Expense[];
 }
 
 export async function exportBackup(): Promise<BackupPayload> {
-  const [business, settings, clients, items, invoices, customTemplates, payslips] =
+  const [business, settings, clients, items, invoices, customTemplates, payslips, expenses] =
     await Promise.all([
       db.business.get("default"),
       db.settings.get("default"),
@@ -31,6 +33,7 @@ export async function exportBackup(): Promise<BackupPayload> {
       db.invoices.toArray(),
       db.customTemplates.toArray(),
       db.payslips.toArray(),
+      db.expenses.toArray(),
     ]);
   return {
     version: 1,
@@ -42,6 +45,7 @@ export async function exportBackup(): Promise<BackupPayload> {
     invoices,
     customTemplates,
     payslips,
+    expenses,
   };
 }
 
@@ -63,6 +67,7 @@ export async function importBackup(
       db.invoices,
       db.customTemplates,
       db.payslips,
+      db.expenses,
     ],
     async () => {
       if (mode === "replace") {
@@ -72,6 +77,7 @@ export async function importBackup(
           db.invoices.clear(),
           db.customTemplates.clear(),
           db.payslips.clear(),
+          db.expenses.clear(),
         ]);
       }
 
@@ -85,6 +91,7 @@ export async function importBackup(
       if (payload.customTemplates?.length)
         await db.customTemplates.bulkPut(payload.customTemplates);
       if (payload.payslips?.length) await db.payslips.bulkPut(payload.payslips);
+      if (payload.expenses?.length) await db.expenses.bulkPut(payload.expenses);
     },
   );
 }

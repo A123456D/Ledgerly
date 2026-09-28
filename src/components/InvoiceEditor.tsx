@@ -3,7 +3,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, DecimalInput, Field, StatusPill, inputClass } from "@/components/ui";
 import { addDaysISO, formatDate, formatMoney, todayISO, uid } from "@/lib/format";
 import {
@@ -123,11 +123,22 @@ export function InvoiceEditor({ id }: { id: string }) {
   const [selectedDecorationId, setSelectedDecorationId] = useState<string | null>(
     null,
   );
+  // Draft edits live locally until an explicit save — the DB copy must never
+  // clobber them (e.g. when editing the business name re-emits `business`).
+  const dirtyRef = useRef(false);
+
+  useEffect(() => {
+    dirtyRef.current = false;
+  }, [id]);
 
   useEffect(() => {
     if (!stored) return;
     if (stored.status !== "draft") {
+      dirtyRef.current = false;
       setInvoice(stored);
+      return;
+    }
+    if (dirtyRef.current) {
       return;
     }
     const vis = resolveVisibility(stored.visibility);
@@ -298,6 +309,7 @@ export function InvoiceEditor({ id }: { id: string }) {
 
   function update(patch: Partial<Invoice>) {
     if (locked) return;
+    dirtyRef.current = true;
     setInvoice((inv) => {
       if (!inv) return inv;
       const next = { ...inv, ...patch };
@@ -309,6 +321,7 @@ export function InvoiceEditor({ id }: { id: string }) {
   function setDraftNumber(value: string) {
     setInvoice((inv) => {
       if (!inv || inv.status !== "draft") return inv;
+      dirtyRef.current = true;
       return { ...inv, number: value };
     });
   }
@@ -339,6 +352,7 @@ export function InvoiceEditor({ id }: { id: string }) {
 
   function updateDecoration(id: string, patch: Partial<InvoiceDecoration>) {
     if (locked) return;
+    dirtyRef.current = true;
     // Functional update so rapid drag events never use a stale decorations array.
     setInvoice((inv) => {
       if (!inv || inv.status !== "draft") return inv;
@@ -551,6 +565,7 @@ export function InvoiceEditor({ id }: { id: string }) {
     setError("");
     try {
       const saved = await saveInvoice(current);
+      dirtyRef.current = false;
       const { clientCreated, ...stored } = saved;
       setInvoice(stored);
       const design = await saveInvoiceDesignTemplate(stored);
@@ -578,6 +593,7 @@ export function InvoiceEditor({ id }: { id: string }) {
     setError("");
     try {
       const saved = await saveInvoice(current);
+      dirtyRef.current = false;
       const issued = await issueInvoice(saved.id);
       await saveInvoiceDesignTemplate(saved);
       setInvoice(issued);
@@ -604,6 +620,7 @@ export function InvoiceEditor({ id }: { id: string }) {
     setError("");
     try {
       const saved = await saveInvoice(invoice);
+      dirtyRef.current = false;
       const { clientCreated: _c, ...storedInv } = saved;
       setInvoice(storedInv);
       const design = await saveNamedDesignTemplate(storedInv, name);
@@ -621,6 +638,7 @@ export function InvoiceEditor({ id }: { id: string }) {
     setError("");
     try {
       const saved = await saveInvoice(invoice);
+      dirtyRef.current = false;
       const { clientCreated: _c, ...storedInv } = saved;
       setInvoice(storedInv);
       const design = await saveInvoiceDesignTemplate(storedInv);
@@ -647,7 +665,10 @@ export function InvoiceEditor({ id }: { id: string }) {
     setBusy(true);
     setError("");
     try {
-      if (current.status === "draft") await saveInvoice(current);
+      if (current.status === "draft") {
+        await saveInvoice(current);
+        dirtyRef.current = false;
+      }
       setSelectedSection(null);
       setSelectedDecorationId(null);
       const latest = (await db.invoices.get(current.id)) || current;

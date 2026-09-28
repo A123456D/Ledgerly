@@ -6,6 +6,7 @@ import {
   type CatalogItem,
   type Client,
   type CustomTemplate,
+  type Expense,
   type Invoice,
   type Payslip,
   DEFAULT_ACCENT,
@@ -20,6 +21,7 @@ export class InvoiceDatabase extends Dexie {
   items!: EntityTable<CatalogItem, "id">;
   invoices!: EntityTable<Invoice, "id">;
   payslips!: EntityTable<Payslip, "id">;
+  expenses!: EntityTable<Expense, "id">;
   settings!: EntityTable<AppSettings, "id">;
   customTemplates!: EntityTable<CustomTemplate, "id">;
   autoBackups!: EntityTable<AutoBackupRecord, "id">;
@@ -65,6 +67,17 @@ export class InvoiceDatabase extends Dexie {
       items: "id, description",
       invoices: "id, status, number, clientId, updatedAt, createdAt, kind",
       payslips: "id, status, number, clientId, updatedAt, createdAt",
+      settings: "id",
+      customTemplates: "id, name, createdAt",
+      autoBackups: "id, createdAt",
+    });
+    this.version(6).stores({
+      business: "id",
+      clients: "id, name, updatedAt",
+      items: "id, description",
+      invoices: "id, status, number, clientId, updatedAt, createdAt, kind",
+      payslips: "id, status, number, clientId, updatedAt, createdAt",
+      expenses: "id, date, category, updatedAt, createdAt",
       settings: "id",
       customTemplates: "id, name, createdAt",
       autoBackups: "id, createdAt",

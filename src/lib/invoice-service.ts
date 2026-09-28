@@ -575,13 +575,18 @@ export async function markInvoiceStatus(
     }
   }
   const now = new Date().toISOString();
-  // Clear payment record when returning to unpaid (issued) or going fully paid.
-  const clearPayments = status === "issued" || status === "paid";
+  // Returning to unpaid clears the payment record; marking paid stamps the
+  // payment date (kept by the dashboard for "received this month").
   const next: Invoice = {
     ...invoice,
     status,
-    amountPaid: clearPayments ? undefined : invoice.amountPaid,
-    paidAt: clearPayments ? undefined : invoice.paidAt,
+    amountPaid: status === "issued" ? undefined : invoice.amountPaid,
+    paidAt:
+      status === "issued"
+        ? undefined
+        : status === "paid"
+          ? todayISO()
+          : invoice.paidAt,
     updatedAt: now,
   };
   await db.invoices.put(next);
