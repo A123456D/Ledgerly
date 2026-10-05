@@ -22,9 +22,12 @@ import {
   A4_WIDTH_MM,
   A4_WIDTH_PX,
   captureSheetHeightPx,
-  shouldFitToSinglePage,
+  PAGE_FIT_MIN_SCALE,
   singlePageFitScale,
 } from "@/lib/sheet-size";
+
+/** Keep the scaled fit a few px clear of the clip edge so rounding never slices a line. */
+const FIT_SAFETY_PX = 4;
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -117,8 +120,23 @@ function layoutSheetForPdf(
     ink = measureInkHeight(sheet);
   }
 
-  if (shouldFitToSinglePage(ink)) {
-    wrapSheetToFitPage(sheet, singlePageFitScale(ink), A4_HEIGHT_PX);
+  // The wrap scales its contents but the sheet's own padding-top stays full
+  // size, so scaling by pagePx/ink lands the bottom padTop·(1−scale) past the
+  // page box — overflow:hidden then slices the last block (e.g. payment).
+  // Scale the content into the space below that offset instead.
+  const sheetTop = sheet.getBoundingClientRect().top;
+  const padTop = Math.max(
+    0,
+    (sheet.querySelector<HTMLElement>("[data-invoice-content]")?.getBoundingClientRect().top ??
+      sheetTop) - sheetTop,
+  );
+  const fitScale = singlePageFitScale(
+    ink - padTop,
+    A4_HEIGHT_PX - padTop - FIT_SAFETY_PX,
+  );
+
+  if (fitScale >= PAGE_FIT_MIN_SCALE) {
+    wrapSheetToFitPage(sheet, fitScale, A4_HEIGHT_PX);
     return { heightPx: A4_HEIGHT_PX, pages: 1 };
   }
 
